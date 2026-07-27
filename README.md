@@ -13,7 +13,7 @@ catalog easier to search, filter, and compare.
   - **Power demand:** required electrical power versus thrust, with a dedicated
     lane for self-powered drives
   - **Installed system:** exhaust velocity versus thrust per tonne of drive,
-    automatically selected compatible power plant, and radiator
+    automatically selected compatible power plant and chosen radiator
 - Logarithmic and linear chart scales
 - Search by drive name, type, or propellant
 - Multi-select filters for propellants, drive families, and drive subtypes
@@ -88,7 +88,8 @@ npm test
    interface and use a consistent accessibility-focused sans-serif font.
 6. Select **Drive performance**, **Power demand**, or **Installed system** above
    the chart. Installed-system mode automatically uses the lightest compatible
-   power-plant and radiator combination available in the included datasets.
+   power plant with the selected radiator. The radiator selector defaults to
+   **Lithium Spray**.
 7. Switch between logarithmic and linear chart scales as needed.
 8. Hover over a chart marker to inspect the drive and its tank composition.
    Power and installed-system views add their relevant power, reactor,
