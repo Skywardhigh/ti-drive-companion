@@ -73,12 +73,12 @@ function PlotShape({shape,x,y,color,selected}:{shape:typeof SHAPES[number];x:num
   return <circle cx={x} cy={y} r={selected?4.5:3.5} {...p}/>;
 }
 
-function placeLabels(points:Array<{drive:Drive;x:number;y:number}>,selected:Set<string>,chart:{width:number;height:number;left:number;right:number;top:number;bottom:number},fontSize:number,nameOf:(drive:Drive)=>string){
+function placeLabels(points:Array<{drive:Drive;x:number;y:number}>,selected:Set<string>,chart:{width:number;height:number;left:number;right:number;top:number;bottom:number},fontSize:number,nameOf:(drive:Drive)=>string,markerPoints=points){
   const placements=new Map<string,LabelPlacement>(),occupied:Array<{left:number;right:number;top:number;bottom:number}>=[];
   const candidates=[{dx:8,dy:3.5,anchor:"start" as const,leader:false},{dx:-8,dy:3.5,anchor:"end" as const,leader:false},{dx:8,dy:-8,anchor:"start" as const,leader:true},{dx:8,dy:14,anchor:"start" as const,leader:true},{dx:-8,dy:-8,anchor:"end" as const,leader:true},{dx:-8,dy:14,anchor:"end" as const,leader:true},{dx:20,dy:3.5,anchor:"start" as const,leader:true},{dx:-20,dy:3.5,anchor:"end" as const,leader:true},{dx:16,dy:-18,anchor:"start" as const,leader:true},{dx:16,dy:24,anchor:"start" as const,leader:true},{dx:-16,dy:-18,anchor:"end" as const,leader:true},{dx:-16,dy:24,anchor:"end" as const,leader:true},...[32,48,64,84,108].flatMap(distance=>[-1,-.5,0,.5,1].flatMap(vertical=>[{dx:distance,dy:vertical*distance+3.5,anchor:"start" as const,leader:true},{dx:-distance,dy:vertical*distance+3.5,anchor:"end" as const,leader:true}]))];
   const overlaps=(a:{left:number;right:number;top:number;bottom:number},b:{left:number;right:number;top:number;bottom:number})=>a.left<b.right+3&&a.right+3>b.left&&a.top<b.bottom+2&&a.bottom+2>b.top;
   const overlapArea=(a:{left:number;right:number;top:number;bottom:number},b:{left:number;right:number;top:number;bottom:number})=>Math.max(0,Math.min(a.right,b.right)-Math.max(a.left,b.left))*Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
-  const markerBounds=points.map(point=>({id:point.drive.dataName,rect:{left:point.x-5,right:point.x+5,top:point.y-5,bottom:point.y+5}}));
+  const markerBounds=markerPoints.map(point=>({id:point.drive.dataName,rect:{left:point.x-5,right:point.x+5,top:point.y-5,bottom:point.y+5}}));
   const prioritized=[...points].sort((a,b)=>Number(selected.has(b.drive.dataName))-Number(selected.has(a.drive.dataName))||a.drive.friendlyName.localeCompare(b.drive.friendlyName));
   for(const point of prioritized){
     const width=Math.max(fontSize*2,nameOf(point.drive).length*fontSize*.61),height=fontSize*1.2;
@@ -143,7 +143,9 @@ export function DriveExplorer(){
   const px=(v:number)=>chart.left+norm(v,domain.xMin,domain.xMax)*(chart.width-chart.left-chart.right),py=(v:number)=>chart.top+(1-norm(v,domain.yMin,domain.yMax))*(chart.height-chart.top-chart.bottom);
   const plotPoints=plotted.map(item=>({...item,x:px(item.values.x),y:py(item.values.y)}));
   const chartDriveName=(drive:Drive)=>maxOnly?baseDriveName(drive):drive.friendlyName;
-  const labels=showNames?placeLabels(plotPoints,new Set(selected),chart,readableText?11:9,chartDriveName):new Map<string,LabelPlacement>();
+  const selectedSet=new Set(selected);
+  const labelPoints=showNames?plotPoints:plotPoints.filter(item=>selectedSet.has(item.drive.dataName));
+  const labels=placeLabels(labelPoints,selectedSet,chart,readableText?11:9,chartDriveName,plotPoints);
   const ticks=[0,.25,.5,.75,1],tickValue=(r:number,min:number,max:number)=>scale==="log"?10**(Math.log10(min)+r*(Math.log10(max)-Math.log10(min))):min+r*(max-min);
   const toggle=(id:string)=>setSelected(c=>c.includes(id)?c.filter(v=>v!==id):c.length<4?[...c,id]:c);
   const togglePropellant=(value:string)=>setExcludedPropellants(current=>{const next=new Set(current);if(next.has(value))next.delete(value);else next.add(value);return next});

@@ -88,7 +88,7 @@ npm test
    of each drive, or disable it to see every thruster-count variant.
 4. **Show drive names** is enabled by default and uses collision-aware placement.
    With **Max thrusters only** active, labels omit the redundant thruster-count
-   suffix. Disable names when a cleaner marker-only view is preferred.
+   suffix. Disable names to keep labels only on drives selected for comparison.
 5. Enable **Larger, clearer text** to increase typography across the entire
    interface and use a consistent accessibility-focused sans-serif font.
 6. Select **Drive performance**, **Power demand**, or **Installed system** above
