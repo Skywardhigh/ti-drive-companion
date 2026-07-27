@@ -27,7 +27,8 @@ catalog easier to search, filter, and compare.
 - Optional filtering to show only the highest-thruster-count variant of each
   drive
 - Hover and keyboard-focus details for performance, propellant type, and fuel
-  tank composition, with delayed automatic dismissal
+  tank composition, including SI-prefixed absolute antimatter units, with
+  delayed automatic dismissal
 - Side-by-side comparison of up to four drives, including required power,
   power-plant requirements, power timing, thrust rating, specific power, and
   thrust per required power
