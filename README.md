@@ -19,7 +19,9 @@ catalog easier to search, filter, and compare.
   drive
 - Hover details for performance, propellant type, and per-tank resource
   composition
-- Side-by-side comparison of up to four drives
+- Side-by-side comparison of up to four drives, including required power,
+  power-plant requirements, power timing, thrust rating, specific power, and
+  thrust per required power
 - Responsive layout for desktop and smaller screens
 
 ## Run locally
@@ -82,7 +84,8 @@ npm test
 6. Switch between logarithmic and linear chart scales as needed.
 7. Hover over a chart marker to inspect the drive and its tank composition.
 8. Select chart markers or search results to compare up to four drives below
-   the chart.
+   the chart, including their complete power requirements. Zero-power drives
+   are identified as self-powered and do not receive a misleading ratio.
 
 ## Drive data
 
