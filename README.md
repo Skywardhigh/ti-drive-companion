@@ -14,8 +14,9 @@ catalog easier to search, filter, and compare.
   - **Drive performance:** exhaust velocity versus thrust
   - **Power demand:** required electrical power versus thrust, with a dedicated
     lane for self-powered drives
-  - **Installed system:** exhaust velocity versus thrust per tonne of drive,
-    automatically selected compatible power plant and chosen radiator
+  - **Installed system:** exhaust velocity versus thrust per tonne of drive and
+    power hardware, including internal specific-power mass for self-powered
+    drives, an automatically selected compatible power plant, and chosen radiator
 - Logarithmic and linear chart scales
 - Search by drive name, type, propellant, or fuel-tank materials that make up at
   least 50% of the tank composition

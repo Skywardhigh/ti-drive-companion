@@ -35,7 +35,7 @@ function formatSpecificPower(d:Drive){return powerRequiredGW(d)<=0?"Not applicab
 function radiatorLabel(radiator:Radiator){return `${radiator.friendlyName}${radiator.radiatorType==="AlienSpike"?" (Alien)":""}`}
 function installedSystem(d:Drive,plants:PowerPlant[],radiators:Radiator[],radiatorChoice:string):InstalledSystem|null {
   const power=powerRequiredGW(d);
-  if(power<=0)return {plant:null,radiator:null,plantMass:0,radiatorMass:0,wasteHeat:0,totalMass:Math.max(d.flatMass_tons,.000001)};
+  if(power<=0){const integratedMass=d.specificPower_kgMW>0?d.specificPower_kgMW*thrustRatingGW(d):0,totalMass=d.flatMass_tons+integratedMass;return totalMass>0?{plant:null,radiator:null,plantMass:integratedMass,radiatorMass:0,wasteHeat:0,totalMass}:null}
   const compatible=plants.filter(plant=>(d.requiredPowerPlant==="Any_General"||plant.powerPlantClass===d.requiredPowerPlant)&&plant.maxOutput_GW>=power);
   if(!compatible.length)return null;
   const preferredRadiator=radiators.find(item=>item.dataName===radiatorChoice&&item.specificPower_2s_KWkg>0)??radiators.find(item=>item.dataName==="LithiumSpray"&&item.specificPower_2s_KWkg>0)??radiators.filter(item=>item.specificPower_2s_KWkg>0).sort((a,b)=>b.specificPower_2s_KWkg-a.specificPower_2s_KWkg)[0]??null;
@@ -51,7 +51,7 @@ function installedSystem(d:Drive,plants:PowerPlant[],radiators:Radiator[],radiat
 const CHART_MODES:Record<ChartMode,{label:string;description:string;xLabel:string;yLabel:string}>={
   performance:{label:"Drive performance",description:"Raw exhaust velocity and thrust from the drive data.",xLabel:"EXHAUST VELOCITY · KM/S",yLabel:"THRUST · NEWTONS"},
   power:{label:"Power demand",description:"Required electrical power against delivered thrust.",xLabel:"REQUIRED POWER · GW",yLabel:"THRUST · NEWTONS"},
-  installed:{label:"Installed system",description:"Thrust per tonne after adding the lightest compatible reactor and selected radiator.",xLabel:"EXHAUST VELOCITY · KM/S",yLabel:"PROPULSION-SYSTEM SPECIFIC THRUST · N/T"},
+  installed:{label:"Installed system",description:"Thrust per tonne of drive and power hardware; self-powered drives include their internal specific-power mass.",xLabel:"EXHAUST VELOCITY · KM/S",yLabel:"PROPULSION-SYSTEM SPECIFIC THRUST · N/T"},
 };
 
 function PropellantFilter({options,excluded,onToggle,onAll,onNone}:{options:string[];excluded:Set<string>;onToggle:(value:string)=>void;onAll:()=>void;onNone:()=>void}){
