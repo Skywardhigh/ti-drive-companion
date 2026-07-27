@@ -6,6 +6,8 @@ starship drives from
 It plots drive thrust against exhaust velocity and makes the game's large drive
 catalog easier to search, filter, and compare.
 
+**Live tool:** [ti-drive-companion.quitti.workers.dev](https://ti-drive-companion.quitti.workers.dev/)
+
 ## Features
 
 - Three selectable chart modes:
