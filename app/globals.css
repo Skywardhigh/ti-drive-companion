@@ -90,6 +90,7 @@ h1 { margin:0; max-width:900px; font-size:clamp(44px,7.5vw,96px); font-weight:50
 .point { cursor:pointer; transition:opacity .16s,filter .16s; }
 .point:hover,.point.selected { opacity:1!important; filter:drop-shadow(0 0 5px currentColor); }
 .point-label { fill:currentColor; stroke:#080d11; stroke-width:3px; stroke-linejoin:round; paint-order:stroke fill; pointer-events:none; font:650 9px var(--font-geist-mono),monospace; letter-spacing:-.01em; }
+.label-leader { stroke:currentColor; stroke-width:.7px; opacity:.58; pointer-events:none; }
 .empty-state,.loading { min-height:480px; display:grid; place-items:center; color:var(--muted); text-align:center; padding:40px; }
 .tooltip { position:absolute; z-index:4; pointer-events:none; width:300px; margin-left:12px; padding:13px 14px; border:1px solid #566672; border-radius:9px; background:#080d11; box-shadow:0 12px 34px rgba(0,0,0,.42); color:#aeb9c2; font:12px/1.45 var(--font-geist-sans),Arial,sans-serif; text-rendering:optimizeLegibility; }
 .tooltip.below { margin-top:12px; }

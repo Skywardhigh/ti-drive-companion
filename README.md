@@ -18,7 +18,7 @@ catalog easier to search, filter, and compare.
 - Search by drive name, type, or propellant
 - Multi-select filters for propellants, drive families, and drive subtypes
 - Color-coded technology families and subtype-specific chart markers
-- Optional drive-name labels beside chart markers
+- Optional collision-aware drive-name labels with automatic nearby placement and`n  leader lines
 - Global larger, clearer text mode using a highly readable sans-serif font
 - Optional filtering to show only the highest-thruster-count variant of each
   drive
@@ -105,8 +105,18 @@ The browser loads three runtime datasets:
 - `public/data/TIPowerPlantTemplate.json` for power plants and reactors
 - `public/data/TIRadiatorTemplate.json` for radiators
 
-The repository retains matching source copies under `data/`. When refreshing
-the catalog, keep each source file and its corresponding runtime copy in sync.
+The repository retains matching source copies under `data/`. To refresh the
+catalog, replace any or all of the source files there, preserving their exact
+filenames, and run:
+
+```bash
+npm run sync-data
+```
+
+The command validates that each file is non-empty JSON, checks the fields used
+by the tool and duplicate `dataName` values, then copies all three datasets to
+`public/data/`. All three files are validated before anything is copied, so a`nvalidation failure leaves the runtime datasets unchanged.
+Run `npm test` afterward before committing or deploying an update.
 
 Together, the datasets include drive performance and classifications,
 power-plant compatibility and capacity, reactor efficiency and specific power,
