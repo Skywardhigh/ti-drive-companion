@@ -17,7 +17,8 @@ catalog easier to search, filter, and compare.
   - **Installed system:** exhaust velocity versus thrust per tonne of drive,
     automatically selected compatible power plant and chosen radiator
 - Logarithmic and linear chart scales
-- Search by drive name, type, or propellant
+- Search by drive name, type, propellant, or fuel-tank materials that make up at
+  least 50% of the tank composition
 - Multi-select filters for propellants, drive families, and drive subtypes
 - Color-coded technology families and subtype-specific chart markers
 - Optional collision-aware drive-name labels with expanded best-fit placement and
@@ -25,8 +26,8 @@ catalog easier to search, filter, and compare.
 - Global larger, clearer text mode using a highly readable sans-serif font
 - Optional filtering to show only the highest-thruster-count variant of each
   drive
-- Hover and keyboard-focus details for performance, propellant type, and
-  per-tank resource composition, with delayed automatic dismissal
+- Hover and keyboard-focus details for performance, propellant type, and fuel
+  tank composition, with delayed automatic dismissal
 - Side-by-side comparison of up to four drives, including required power,
   power-plant requirements, power timing, thrust rating, specific power, and
   thrust per required power
@@ -95,7 +96,7 @@ npm test
    power plant with the selected radiator. The radiator selector defaults to
    **Lithium Spray**.
 7. Switch between logarithmic and linear chart scales as needed.
-8. Hover over a chart marker to inspect the drive and its tank composition.
+8. Hover over a chart marker to inspect the drive and its fuel tank composition.
    Power and installed-system views add their relevant power, reactor,
    radiator, mass, and specific-thrust details.
 9. Select chart markers or search results to compare up to four drives below
