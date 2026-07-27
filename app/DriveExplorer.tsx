@@ -72,8 +72,9 @@ function PlotShape({shape,x,y,color,selected}:{shape:typeof SHAPES[number];x:num
 
 function placeLabels(points:Array<{drive:Drive;x:number;y:number}>,selected:Set<string>,chart:{width:number;height:number;left:number;right:number;top:number;bottom:number},fontSize:number){
   const placements=new Map<string,LabelPlacement>(),occupied:Array<{left:number;right:number;top:number;bottom:number}>=[];
-  const candidates=[{dx:8,dy:3.5,anchor:"start" as const},{dx:-8,dy:3.5,anchor:"end" as const},{dx:8,dy:-8,anchor:"start" as const},{dx:8,dy:14,anchor:"start" as const},{dx:-8,dy:-8,anchor:"end" as const},{dx:-8,dy:14,anchor:"end" as const}];
+  const candidates=[{dx:8,dy:3.5,anchor:"start" as const,leader:false},{dx:-8,dy:3.5,anchor:"end" as const,leader:false},{dx:8,dy:-8,anchor:"start" as const,leader:true},{dx:8,dy:14,anchor:"start" as const,leader:true},{dx:-8,dy:-8,anchor:"end" as const,leader:true},{dx:-8,dy:14,anchor:"end" as const,leader:true},{dx:20,dy:3.5,anchor:"start" as const,leader:true},{dx:-20,dy:3.5,anchor:"end" as const,leader:true},{dx:16,dy:-18,anchor:"start" as const,leader:true},{dx:16,dy:24,anchor:"start" as const,leader:true},{dx:-16,dy:-18,anchor:"end" as const,leader:true},{dx:-16,dy:24,anchor:"end" as const,leader:true}];
   const overlaps=(a:{left:number;right:number;top:number;bottom:number},b:{left:number;right:number;top:number;bottom:number})=>a.left<b.right+3&&a.right+3>b.left&&a.top<b.bottom+2&&a.bottom+2>b.top;
+  const markerBounds=points.map(point=>({id:point.drive.dataName,rect:{left:point.x-5,right:point.x+5,top:point.y-5,bottom:point.y+5}}));
   const prioritized=[...points].sort((a,b)=>Number(selected.has(b.drive.dataName))-Number(selected.has(a.drive.dataName))||a.drive.friendlyName.localeCompare(b.drive.friendlyName));
   for(const point of prioritized){
     const width=Math.max(fontSize*2,point.drive.friendlyName.length*fontSize*.61),height=fontSize*1.2;
@@ -81,9 +82,10 @@ function placeLabels(points:Array<{drive:Drive;x:number;y:number}>,selected:Set<
       const candidate=candidates[index],textX=point.x+candidate.dx,textY=point.y+candidate.dy;
       const rect={left:candidate.anchor==="start"?textX:textX-width,right:candidate.anchor==="start"?textX+width:textX,top:textY-fontSize*.82,bottom:textY+height-fontSize*.82};
       const inBounds=rect.left>=chart.left&&rect.right<=chart.width-chart.right&&rect.top>=chart.top&&rect.bottom<=chart.height-chart.bottom;
-      if(!inBounds||occupied.some(other=>overlaps(rect,other)))continue;
+      const coversMarker=markerBounds.some(marker=>marker.id!==point.drive.dataName&&overlaps(rect,marker.rect));
+      if(!inBounds||coversMarker||occupied.some(other=>overlaps(rect,other)))continue;
       const placement:LabelPlacement={textX,textY,anchor:candidate.anchor};
-      if(index>=2)placement.line={x1:point.x+Math.sign(candidate.dx)*4,y1:point.y+Math.sign(candidate.dy)*2,x2:textX+(candidate.anchor==="start"?-2:2),y2:textY-fontSize*.22};
+      if(candidate.leader)placement.line={x1:point.x+Math.sign(candidate.dx)*4,y1:point.y+Math.sign(candidate.dy)*2,x2:textX+(candidate.anchor==="start"?-2:2),y2:textY-fontSize*.22};
       placements.set(point.drive.dataName,placement);occupied.push(rect);break;
     }
   }
