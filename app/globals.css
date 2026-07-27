@@ -30,7 +30,7 @@ h1 { margin:0; max-width:900px; font-size:clamp(44px,7.5vw,96px); font-weight:50
 .panel-head { padding:18px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; }
 .panel-title { margin:0; font-size:13px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
 .count { color:var(--muted); font:12px var(--font-geist-mono),monospace; }
-.controls { position:relative; z-index:10; display:grid; grid-template-columns:minmax(220px,1fr) 180px 230px auto auto; gap:10px; padding:14px 20px; border-bottom:1px solid var(--line); }
+.controls { position:relative; z-index:10; display:grid; grid-template-columns:minmax(220px,1fr) 180px 230px auto auto auto; gap:10px; padding:14px 20px; border-bottom:1px solid var(--line); }
 .search-control { position:relative; }
 .search-control .input { padding-right:44px; }
 .clear-search { position:absolute; top:6px; right:6px; width:30px; height:30px; border:0; border-radius:7px; background:var(--panel-raised); color:var(--muted); cursor:pointer; font-size:18px; line-height:1; }
@@ -79,6 +79,7 @@ h1 { margin:0; max-width:900px; font-size:clamp(44px,7.5vw,96px); font-weight:50
 .axis-label { fill:#a7b2bc; font:650 10px var(--font-geist-mono),monospace; letter-spacing:.12em; }
 .point { cursor:pointer; transition:opacity .16s,filter .16s; }
 .point:hover,.point.selected { opacity:1!important; filter:drop-shadow(0 0 5px currentColor); }
+.point-label { fill:currentColor; stroke:#080d11; stroke-width:3px; stroke-linejoin:round; paint-order:stroke fill; pointer-events:none; font:650 9px var(--font-geist-mono),monospace; letter-spacing:-.01em; }
 .empty-state,.loading { min-height:480px; display:grid; place-items:center; color:var(--muted); text-align:center; padding:40px; }
 .tooltip { position:absolute; z-index:4; pointer-events:none; width:280px; padding:11px 12px; border:1px solid #44515c; border-radius:9px; background:rgba(8,13,17,.96); box-shadow:0 12px 34px rgba(0,0,0,.35); font-size:11px; color:var(--muted); transform:translate(12px,-50%); }
 .tooltip strong { display:block; color:var(--ink); font-size:12px; margin-bottom:6px; }

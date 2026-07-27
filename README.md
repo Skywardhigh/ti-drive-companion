@@ -13,6 +13,7 @@ catalog easier to search, filter, and compare.
 - Search by drive name, type, or propellant
 - Multi-select filters for propellants, drive families, and drive subtypes
 - Color-coded technology families and subtype-specific chart markers
+- Optional drive-name labels beside chart markers
 - Optional filtering to show only the highest-thruster-count variant of each
   drive
 - Hover details for performance, propellant type, and per-tank resource
@@ -73,9 +74,11 @@ npm test
    categories. Drive subtypes are grouped beneath their main technology family.
 3. Keep **Max thrusters only** enabled to show only the largest configuration
    of each drive, or disable it to see every thruster-count variant.
-4. Switch between logarithmic and linear chart scales as needed.
-5. Hover over a chart marker to inspect the drive and its tank composition.
-6. Select chart markers or search results to compare up to four drives below
+4. Enable **Show drive names** to label chart markers directly; it is disabled
+   by default to keep dense views readable.
+5. Switch between logarithmic and linear chart scales as needed.
+6. Hover over a chart marker to inspect the drive and its tank composition.
+7. Select chart markers or search results to compare up to four drives below
    the chart.
 
 ## Drive data
