@@ -20,13 +20,13 @@ catalog easier to search, filter, and compare.
 - Search by drive name, type, or propellant
 - Multi-select filters for propellants, drive families, and drive subtypes
 - Color-coded technology families and subtype-specific chart markers
-- Optional collision-aware drive-name labels with automatic nearby placement and
-  leader lines
+- Optional collision-aware drive-name labels with expanded best-fit placement and
+  leader lines for dense clusters
 - Global larger, clearer text mode using a highly readable sans-serif font
 - Optional filtering to show only the highest-thruster-count variant of each
   drive
-- Hover details for performance, propellant type, and per-tank resource
-  composition
+- Hover and keyboard-focus details for performance, propellant type, and
+  per-tank resource composition, with delayed automatic dismissal
 - Side-by-side comparison of up to four drives, including required power,
   power-plant requirements, power timing, thrust rating, specific power, and
   thrust per required power
