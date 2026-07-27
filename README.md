@@ -8,7 +8,12 @@ catalog easier to search, filter, and compare.
 
 ## Features
 
-- Interactive thrust-versus-exhaust-velocity chart
+- Three selectable chart modes:
+  - **Drive performance:** exhaust velocity versus thrust
+  - **Power demand:** required electrical power versus thrust, with a dedicated
+    lane for self-powered drives
+  - **Installed system:** exhaust velocity versus thrust per tonne of drive,
+    automatically selected compatible power plant, and radiator
 - Logarithmic and linear chart scales
 - Search by drive name, type, or propellant
 - Multi-select filters for propellants, drive families, and drive subtypes
@@ -81,22 +86,33 @@ npm test
    by default to keep dense views readable.
 5. Enable **Larger, clearer text** to increase typography across the entire
    interface and use a consistent accessibility-focused sans-serif font.
-6. Switch between logarithmic and linear chart scales as needed.
-7. Hover over a chart marker to inspect the drive and its tank composition.
-8. Select chart markers or search results to compare up to four drives below
+6. Select **Drive performance**, **Power demand**, or **Installed system** above
+   the chart. Installed-system mode automatically uses the lightest compatible
+   power-plant and radiator combination available in the included datasets.
+7. Switch between logarithmic and linear chart scales as needed.
+8. Hover over a chart marker to inspect the drive and its tank composition.
+   Power and installed-system views add their relevant power, reactor,
+   radiator, mass, and specific-thrust details.
+9. Select chart markers or search results to compare up to four drives below
    the chart, including their complete power requirements. Zero-power drives
    are identified as self-powered and do not receive a misleading ratio.
 
-## Drive data
+## Game data
 
-The browser loads its runtime dataset from
-`public/data/TIDriveTemplate.json`. The repository also retains the source copy
-at `data/TIDriveTemplate.json`. When refreshing the catalog, keep both files in
-sync.
+The browser loads three runtime datasets:
 
-The current dataset includes drive performance, classifications, required
-power-plant types, propellant categories, and per-tank Terra Invicta resource
-compositions. Disabled configurations are excluded from the chart.
+- `public/data/TIDriveTemplate.json` for drives
+- `public/data/TIPowerPlantTemplate.json` for power plants and reactors
+- `public/data/TIRadiatorTemplate.json` for radiators
+
+The repository retains matching source copies under `data/`. When refreshing
+the catalog, keep each source file and its corresponding runtime copy in sync.
+
+Together, the datasets include drive performance and classifications,
+power-plant compatibility and capacity, reactor efficiency and specific power,
+radiator heat rejection and mass characteristics, propellant categories, and
+per-tank Terra Invicta resource compositions. Disabled drive configurations are
+excluded from the chart.
 
 ## Terra Invicta attribution
 
@@ -106,7 +122,9 @@ Terra Invicta is developed by
 community tool and is not affiliated with, endorsed by, or sponsored by Pavonis
 Interactive or Hooded Horse.
 
-All Terra Invicta engine data, drive names, classifications, game terminology,
+All Terra Invicta drive, power-plant/reactor, and radiator data—including the
+contents of `TIDriveTemplate.json`, `TIPowerPlantTemplate.json`, and
+`TIRadiatorTemplate.json`—as well as names, classifications, game terminology,
 and other game-derived content belong to their respective rights holders,
 including Pavonis Interactive and Hooded Horse.
 
@@ -122,7 +140,7 @@ The TI Drive Companion tool source code is available under the
 [MIT License](LICENSE).
 
 **The MIT License applies only to the tool's original source code. It does not
-apply to the included Terra Invicta engine dataset or any other game-derived
-names, data, terminology, or content.** Those materials remain the property of
-their respective rights holders and are included here only for use by this
-unofficial comparison tool.
+apply to the included Terra Invicta drive, power-plant/reactor, or radiator
+datasets, or any other game-derived names, data, terminology, or content.**
+Those materials remain the property of their respective rights holders and are
+included here only for use by this unofficial comparison tool.
