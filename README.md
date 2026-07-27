@@ -14,6 +14,7 @@ catalog easier to search, filter, and compare.
 - Multi-select filters for propellants, drive families, and drive subtypes
 - Color-coded technology families and subtype-specific chart markers
 - Optional drive-name labels beside chart markers
+- Global larger, clearer text mode using a highly readable sans-serif font
 - Optional filtering to show only the highest-thruster-count variant of each
   drive
 - Hover details for performance, propellant type, and per-tank resource
@@ -76,9 +77,11 @@ npm test
    of each drive, or disable it to see every thruster-count variant.
 4. Enable **Show drive names** to label chart markers directly; it is disabled
    by default to keep dense views readable.
-5. Switch between logarithmic and linear chart scales as needed.
-6. Hover over a chart marker to inspect the drive and its tank composition.
-7. Select chart markers or search results to compare up to four drives below
+5. Enable **Larger, clearer text** to increase typography across the entire
+   interface and use a consistent accessibility-focused sans-serif font.
+6. Switch between logarithmic and linear chart scales as needed.
+7. Hover over a chart marker to inspect the drive and its tank composition.
+8. Select chart markers or search results to compare up to four drives below
    the chart.
 
 ## Drive data
