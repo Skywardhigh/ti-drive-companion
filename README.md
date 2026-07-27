@@ -20,7 +20,8 @@ catalog easier to search, filter, and compare.
 - Logarithmic and linear chart scales
 - Search by drive name, type, propellant, or fuel-tank materials that make up at
   least 50% of the tank composition
-- Multi-select filters for propellants, drive families, and drive subtypes
+- Multi-select filters for propellants, drive families, drive subtypes, and
+  open/closed cooling cycles in Installed System mode
 - Color-coded technology families and subtype-specific chart markers
 - Optional collision-aware drive-name labels with expanded best-fit placement and
   leader lines for dense clusters
@@ -96,7 +97,8 @@ npm test
 6. Select **Drive performance**, **Power demand**, or **Installed system** above
    the chart. Installed-system mode automatically uses the lightest compatible
    power plant with the selected radiator. The radiator selector defaults to
-   **Lithium Spray**.
+   **Lithium Spray**. Its cycle filter can independently show open- and
+   closed-cycle drives; radiator-calculated drives are grouped as closed cycle.
 7. Switch between logarithmic and linear chart scales as needed.
 8. Hover over a chart marker to inspect the drive and its fuel tank composition.
    Power and installed-system views add their relevant power, reactor,
