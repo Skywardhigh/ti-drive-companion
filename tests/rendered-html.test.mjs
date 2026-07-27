@@ -22,6 +22,9 @@ test("server-renders the drive companion shell", async () => {
   assert.match(html, /<title>TI Drive Companion<\/title>/i);
   assert.match(html, /Find the drive that fits the mission\./);
   assert.match(html, /Performance envelope/);
+  assert.match(html, /Drive performance/);
+  assert.match(html, /Power demand/);
+  assert.match(html, /Installed system/);
   assert.match(html, /Loading drive telemetry/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/);
 });

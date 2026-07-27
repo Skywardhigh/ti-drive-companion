@@ -30,6 +30,13 @@ h1 { margin:0; max-width:900px; font-size:clamp(44px,7.5vw,96px); font-weight:50
 .panel-head { padding:18px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; }
 .panel-title { margin:0; font-size:13px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
 .count { color:var(--muted); font:12px var(--font-geist-mono),monospace; }
+.chart-mode-bar { display:flex; align-items:center; gap:16px; padding:14px 20px 4px; }
+.chart-mode-bar p { margin:0; color:var(--muted); font-size:11px; line-height:1.4; }
+.chart-mode-toggle { display:inline-flex; flex:0 0 auto; padding:3px; border:1px solid var(--line); border-radius:11px; background:#0b1217; }
+.chart-mode-toggle button { min-height:36px; padding:0 14px; border:0; border-radius:8px; background:transparent; color:var(--muted); cursor:pointer; font-size:12px; font-weight:750; }
+.chart-mode-toggle button:hover { color:var(--ink); }
+.chart-mode-toggle button:focus-visible { outline:2px solid #65b9ec; outline-offset:1px; }
+.chart-mode-toggle button.active { color:#10140b; background:var(--acid); }
 .controls { position:relative; z-index:10; display:grid; grid-template-columns:minmax(220px,1fr) 180px 230px auto auto auto; gap:10px; padding:14px 20px; border-bottom:1px solid var(--line); }
 .search-control { position:relative; }
 .search-control .input { padding-right:44px; }
@@ -76,6 +83,8 @@ h1 { margin:0; max-width:900px; font-size:clamp(44px,7.5vw,96px); font-weight:50
 .chart-wrap { padding:8px 16px 16px 4px; position:relative; overflow-x:auto; }
 .chart { width:100%; height:auto; aspect-ratio:1400/760; overflow:visible; display:block; }
 .grid-line { stroke:#25313a; stroke-width:1; stroke-dasharray:2 7; }
+.zero-power-lane { fill:rgba(217,255,91,.045); stroke:rgba(217,255,91,.22); stroke-width:1; stroke-dasharray:4 6; }
+.zero-power-label { fill:#9caf68; font:650 9px var(--font-geist-mono),monospace; letter-spacing:.08em; }
 .axis-text { fill:#70808d; font:10px var(--font-geist-mono),monospace; }
 .axis-label { fill:#a7b2bc; font:650 10px var(--font-geist-mono),monospace; letter-spacing:.12em; }
 .point { cursor:pointer; transition:opacity .16s,filter .16s; }
@@ -130,6 +139,8 @@ h1 { margin:0; max-width:900px; font-size:clamp(44px,7.5vw,96px); font-weight:50
 .readable-text .hero p { font-size:clamp(17px,2vw,22px); }
 .readable-text .panel-title { font-size:15px; }
 .readable-text .count { font-size:14px; }
+.readable-text .chart-mode-toggle button { font-size:14px; }
+.readable-text .chart-mode-bar p { font-size:13px; }
 .readable-text .input,.readable-text .select,.readable-text .filter-dropdown summary,.readable-text .max-toggle,.readable-text .global-font-toggle,.readable-text .scale-toggle button { font-size:14px; }
 .readable-text .clear-search { font-size:20px; }
 .readable-text .filter-actions button { font-size:12px; }
@@ -150,5 +161,5 @@ h1 { margin:0; max-width:900px; font-size:clamp(44px,7.5vw,96px); font-weight:50
 .readable-text .metric-section-label { font-size:11px; }
 .readable-text .add-btn { font-size:20px; }
 @media (max-width:1280px) { .controls{grid-template-columns:minmax(220px,1fr) 180px 230px}.compare-list{grid-template-columns:repeat(2,minmax(0,1fr))}.results{max-height:220px} }
-@media (max-width:760px) { .app-shell{padding-inline:12px}.topbar{margin-bottom:38px}.dataset-badge{display:none}.controls{grid-template-columns:1fr}.scale-toggle{height:42px}.scale-toggle button{flex:1}.max-toggle{justify-content:center}.filter-menu,.type-dropdown .filter-menu{width:min(340px,calc(100vw - 48px))}.chart-wrap{padding-bottom:10px}.chart{min-width:760px}.compare-list{grid-template-columns:1fr} }
+@media (max-width:760px) { .app-shell{padding-inline:12px}.topbar{margin-bottom:38px}.dataset-badge{display:none}.chart-mode-bar{align-items:stretch;flex-direction:column;gap:8px}.chart-mode-toggle{display:grid;grid-template-columns:1fr}.chart-mode-toggle button{min-height:40px}.controls{grid-template-columns:1fr}.scale-toggle{height:42px}.scale-toggle button{flex:1}.max-toggle{justify-content:center}.filter-menu,.type-dropdown .filter-menu{width:min(340px,calc(100vw - 48px))}.chart-wrap{padding-bottom:10px}.chart{min-width:760px}.compare-list{grid-template-columns:1fr} }
 @media (prefers-reduced-motion:reduce) { *{transition:none!important} }

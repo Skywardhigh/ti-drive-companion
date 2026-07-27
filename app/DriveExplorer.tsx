@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Drive = { dataName:string; friendlyName:string; driveClassification:string; requiredPowerPlant:string; thrust_N:number; EV_kps:number; flatMass_tons:number; specificPower_kgMW:number; efficiency:number; propellant:string; thrusters:number; "req power":string|number; thrustRating_GW:string|number; powerGen:string; perTankPropellantMaterials?:Record<string,number>; disable?:boolean };
+type Drive = { dataName:string; friendlyName:string; driveClassification:string; requiredPowerPlant:string; thrust_N:number; EV_kps:number; flatMass_tons:number; specificPower_kgMW:number; efficiency:number; propellant:string; thrusters:number; "req power":string|number; thrustRating_GW:string|number; powerGen:string; cooling:"Open"|"Closed"|"Calc"; perTankPropellantMaterials?:Record<string,number>; disable?:boolean };
+type PowerPlant = { dataName:string; friendlyName:string; maxOutput_GW:number; specificPower_tGW:number; powerPlantClass:string; efficiency:number };
+type Radiator = { dataName:string; friendlyName:string; specificPower_2s_KWkg:number };
+type ChartMode = "performance"|"power"|"installed";
+type InstalledSystem = { plant:PowerPlant|null; radiator:Radiator|null; plantMass:number; radiatorMass:number; wasteHeat:number; totalMass:number };
 type Family = "Chemical"|"Fission"|"Fusion"|"Antimatter"|"Electric"|"Other";
 const COLORS:Record<Family,string>={Chemical:"#f4b942",Fission:"#65c79f",Fusion:"#a38cff",Antimatter:"#ff6f91",Electric:"#65b9ec",Other:"#a7b0b8"};
 const SHAPES=["circle","diamond","square","triangle","cross"] as const;
@@ -24,6 +28,25 @@ function formatThrustPerPower(d:Drive){const power=powerRequiredGW(d);return pow
 function formatPowerPlant(d:Drive){return powerRequiredGW(d)<=0?"No external plant required":SUBTYPE_LABELS[d.requiredPowerPlant]??readable(d.requiredPowerPlant)}
 function formatPowerTiming(d:Drive){return powerRequiredGW(d)<=0?"Internal / self-powered":readable(d.powerGen)}
 function formatSpecificPower(d:Drive){return powerRequiredGW(d)<=0?"Not applicable":d.specificPower_kgMW>0?precise(d.specificPower_kgMW," kg/MW"):"Not listed"}
+function installedSystem(d:Drive,plants:PowerPlant[],radiators:Radiator[]):InstalledSystem|null {
+  const power=powerRequiredGW(d);
+  if(power<=0)return {plant:null,radiator:null,plantMass:0,radiatorMass:0,wasteHeat:0,totalMass:Math.max(d.flatMass_tons,.000001)};
+  const compatible=plants.filter(plant=>(d.requiredPowerPlant==="Any_General"||plant.powerPlantClass===d.requiredPowerPlant)&&plant.maxOutput_GW>=power);
+  if(!compatible.length)return null;
+  const radiator=d.cooling==="Open"?null:radiators.filter(item=>item.specificPower_2s_KWkg>0).sort((a,b)=>b.specificPower_2s_KWkg-a.specificPower_2s_KWkg)[0]??null;
+  return compatible.map(plant=>{
+    const plantMass=power*plant.specificPower_tGW;
+    const wasteHeat=d.cooling==="Open"?0:power*(1-plant.efficiency);
+    const radiatorMass=radiator?wasteHeat*1000/radiator.specificPower_2s_KWkg:0;
+    return {plant,radiator,plantMass,radiatorMass,wasteHeat,totalMass:Math.max(d.flatMass_tons+plantMass+radiatorMass,.000001)};
+  }).sort((a,b)=>a.totalMass-b.totalMass)[0];
+}
+
+const CHART_MODES:Record<ChartMode,{label:string;description:string;xLabel:string;yLabel:string}>={
+  performance:{label:"Drive performance",description:"Raw exhaust velocity and thrust from the drive data.",xLabel:"EXHAUST VELOCITY · KM/S",yLabel:"THRUST · NEWTONS"},
+  power:{label:"Power demand",description:"Required electrical power against delivered thrust.",xLabel:"REQUIRED POWER · GW",yLabel:"THRUST · NEWTONS"},
+  installed:{label:"Installed system",description:"Thrust per tonne after adding the lightest compatible reactor and radiator.",xLabel:"EXHAUST VELOCITY · KM/S",yLabel:"PROPULSION-SYSTEM SPECIFIC THRUST · N/T"},
+};
 
 function PropellantFilter({options,excluded,onToggle,onAll,onNone}:{options:string[];excluded:Set<string>;onToggle:(value:string)=>void;onAll:()=>void;onNone:()=>void}){
   const included=options.length-excluded.size;
@@ -47,8 +70,9 @@ function PlotShape({shape,x,y,color,selected}:{shape:typeof SHAPES[number];x:num
 }
 
 export function DriveExplorer(){
-  const [drives,setDrives]=useState<Drive[]>([]),[error,setError]=useState(""),[query,setQuery]=useState("");
+  const [drives,setDrives]=useState<Drive[]>([]),[plants,setPlants]=useState<PowerPlant[]>([]),[radiators,setRadiators]=useState<Radiator[]>([]),[error,setError]=useState(""),[query,setQuery]=useState("");
   const [scale,setScale]=useState<"log"|"linear">("log"),[selected,setSelected]=useState<string[]>([]);
+  const [chartMode,setChartMode]=useState<ChartMode>("performance");
   const [maxOnly,setMaxOnly]=useState(true);
   const [showNames,setShowNames]=useState(false);
   const [readableText,setReadableText]=useState(false);
@@ -56,7 +80,7 @@ export function DriveExplorer(){
   const [excludedFamilies,setExcludedFamilies]=useState<Set<Family>>(()=>new Set());
   const [excludedSubtypes,setExcludedSubtypes]=useState<Set<string>>(()=>new Set());
   const [hovered,setHovered]=useState<{drive:Drive;x:number;y:number}|null>(null);
-  useEffect(()=>{fetch("/data/TIDriveTemplate.json").then(r=>{if(!r.ok)throw new Error("Could not load the drive dataset.");return r.json()}).then((values:Drive[])=>{const active=values.filter(d=>!d.disable);setDrives(active);setSelected(["Apex Solid Rocket","Lars Drive","Triton Reflex Drive"].map(name=>active.filter(d=>baseDriveName(d)===name).sort((a,b)=>b.thrusters-a.thrusters)[0]?.dataName).filter((id):id is string=>Boolean(id)))}).catch(e=>setError(e instanceof Error?e.message:"Could not load data."))},[]);
+  useEffect(()=>{Promise.all([fetch("/data/TIDriveTemplate.json"),fetch("/data/TIPowerPlantTemplate.json"),fetch("/data/TIRadiatorTemplate.json")]).then(async responses=>{if(responses.some(response=>!response.ok))throw new Error("Could not load the propulsion datasets.");return Promise.all(responses.map(response=>response.json()))}).then(([driveValues,plantValues,radiatorValues]:[Drive[],PowerPlant[],Radiator[]])=>{const active=driveValues.filter(d=>!d.disable);setDrives(active);setPlants(plantValues);setRadiators(radiatorValues);setSelected(["Apex Solid Rocket","Lars Drive","Triton Reflex Drive"].map(name=>active.filter(d=>baseDriveName(d)===name).sort((a,b)=>b.thrusters-a.thrusters)[0]?.dataName).filter((id):id is string=>Boolean(id)))}).catch(e=>setError(e instanceof Error?e.message:"Could not load data."))},[]);
   const propellantOptions=useMemo(()=>Array.from(new Set(drives.map(d=>d.propellant))).sort(),[drives]);
   const familyGroups=useMemo(()=>(Object.keys(COLORS) as Family[]).map(family=>({family,subtypes:Array.from(new Set(drives.filter(d=>familyOf(d)===family).map(subtypeKey))).sort()})).filter(group=>group.subtypes.length),[drives]);
   const filtered=useMemo(()=>{
@@ -66,8 +90,17 @@ export function DriveExplorer(){
   },[drives,excludedFamilies,excludedPropellants,excludedSubtypes,maxOnly,query]);
   const selectedDrives=selected.map(id=>drives.find(d=>d.dataName===id)).filter((d):d is Drive=>Boolean(d));
   const searchResults=query.trim()?filtered.slice(0,8):[];
-  const chart={width:1400,height:760,left:88,right:34,top:34,bottom:70};
-  const xs=filtered.map(d=>d.EV_kps).filter(v=>v>0),ys=filtered.map(d=>d.thrust_N).filter(v=>v>0);
+  const chart={width:1400,height:760,left:100,right:34,top:34,bottom:70};
+  const systems=useMemo(()=>new Map(filtered.map(d=>[d.dataName,installedSystem(d,plants,radiators)])),[filtered,plants,radiators]);
+  const positivePowers=filtered.map(powerRequiredGW).filter(value=>value>0);
+  const powerFloor=positivePowers.length?Math.min(...positivePowers)/10:.01;
+  const valuesFor=(d:Drive)=>{
+    if(chartMode==="power")return {x:powerRequiredGW(d)>0?powerRequiredGW(d):powerFloor,y:d.thrust_N};
+    if(chartMode==="installed"){const system=systems.get(d.dataName);return system?{x:d.EV_kps,y:d.thrust_N/system.totalMass}:null}
+    return {x:d.EV_kps,y:d.thrust_N};
+  };
+  const plotted=filtered.map(d=>({drive:d,values:valuesFor(d)})).filter((item):item is {drive:Drive;values:{x:number;y:number}}=>Boolean(item.values&&item.values.x>0&&item.values.y>0));
+  const xs=plotted.map(item=>item.values.x),ys=plotted.map(item=>item.values.y);
   const domain={xMin:xs.length?Math.min(...xs):1,xMax:xs.length?Math.max(...xs):10,yMin:ys.length?Math.min(...ys):1,yMax:ys.length?Math.max(...ys):10};
   const norm=(v:number,min:number,max:number)=>scale==="log"?(Math.log10(v)-Math.log10(min))/Math.max(.00001,Math.log10(max)-Math.log10(min)):(v-min)/Math.max(.00001,max-min);
   const px=(v:number)=>chart.left+norm(v,domain.xMin,domain.xMax)*(chart.width-chart.left-chart.right),py=(v:number)=>chart.top+(1-norm(v,domain.yMin,domain.yMax))*(chart.height-chart.top-chart.bottom);
@@ -76,20 +109,23 @@ export function DriveExplorer(){
   const togglePropellant=(value:string)=>setExcludedPropellants(current=>{const next=new Set(current);if(next.has(value))next.delete(value);else next.add(value);return next});
   const toggleFamily=(value:Family)=>setExcludedFamilies(current=>{const next=new Set(current);if(next.has(value))next.delete(value);else next.add(value);return next});
   const toggleSubtype=(family:Family,value:string)=>{const familyWasExcluded=excludedFamilies.has(family);setExcludedSubtypes(current=>{const next=new Set(current);if(familyWasExcluded||next.has(value))next.delete(value);else next.add(value);return next});setExcludedFamilies(current=>{if(!current.has(family))return current;const next=new Set(current);next.delete(family);return next})};
+  const mode=CHART_MODES[chartMode];
 
   return <main className={`app-shell${readableText?" readable-text":""}`}>
     <header className="topbar"><div className="brand"><span className="brand-mark" aria-hidden="true"/>TI DRIVE COMPANION</div><div className="dataset-badge">Terra Invicta · {drives.length||"—"} active configurations</div></header>
     <section className="hero"><p className="eyebrow">Ship propulsion atlas / 01</p><h1>Find the drive that fits the mission.</h1><p>Map every drive by exhaust velocity and thrust, isolate a technology family, then pin up to four candidates for a direct performance readout.</p></section>
     <section className="workspace">
       <div className="panel"><div className="panel-head"><h2 className="panel-title">Performance envelope</h2><span className="count">{filtered.length} shown</span></div>
+        <div className="chart-mode-bar"><div className="chart-mode-toggle" role="group" aria-label="Chart mode">{(Object.keys(CHART_MODES) as ChartMode[]).map(value=><button type="button" key={value} className={chartMode===value?"active":""} onClick={()=>{setChartMode(value);setHovered(null)}} aria-pressed={chartMode===value}>{CHART_MODES[value].label}</button>)}</div><p>{mode.description}</p></div>
         <div className="accessibility-row"><label className="global-font-toggle"><input type="checkbox" checked={readableText} onChange={e=>setReadableText(e.target.checked)}/><span className="toggle-track" aria-hidden="true"><span/></span><span>Larger, clearer text</span></label></div>
         <div className="controls"><div className="search-control"><input className="input" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search name, type, propellant…" aria-label="Search drives"/>{query&&<button className="clear-search" onClick={()=>setQuery("")} aria-label="Clear search filter" title="Clear search">×</button>}</div><PropellantFilter options={propellantOptions} excluded={excludedPropellants} onToggle={togglePropellant} onAll={()=>setExcludedPropellants(new Set())} onNone={()=>setExcludedPropellants(new Set(propellantOptions))}/><DriveTypeFilter groups={familyGroups} excludedFamilies={excludedFamilies} excludedSubtypes={excludedSubtypes} onFamily={toggleFamily} onSubtype={toggleSubtype} onAll={()=>{setExcludedFamilies(new Set());setExcludedSubtypes(new Set())}} onNone={()=>setExcludedFamilies(new Set(familyGroups.map(group=>group.family)))}/><label className="max-toggle"><input type="checkbox" checked={maxOnly} onChange={e=>setMaxOnly(e.target.checked)}/><span className="toggle-track" aria-hidden="true"><span/></span><span>Max thrusters only</span></label><label className="max-toggle"><input type="checkbox" checked={showNames} onChange={e=>setShowNames(e.target.checked)}/><span className="toggle-track" aria-hidden="true"><span/></span><span>Show drive names</span></label><div className="scale-toggle" aria-label="Chart scale"><button className={scale==="log"?"active":""} onClick={()=>setScale("log")} aria-pressed={scale==="log"}>Log</button><button className={scale==="linear"?"active":""} onClick={()=>setScale("linear")} aria-pressed={scale==="linear"}>Linear</button></div></div>
         <div className="legend">{(Object.keys(COLORS) as Family[]).map(n=><span className="legend-item" key={n}><span className="legend-dot" style={{"--dot":COLORS[n]} as React.CSSProperties}/>{n}</span>)}<span>• shape = power-plant subtype</span></div>
-        {error?<div className="empty-state">{error}</div>:!drives.length?<div className="loading">Loading drive telemetry…</div>:!filtered.length?<div className="empty-state">No drives match the active filters.</div>:<div className="chart-wrap" onMouseLeave={()=>setHovered(null)}><svg className="chart" viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Scatter plot of drive exhaust velocity versus thrust">
-          {ticks.map(t=>{const x=chart.left+t*(chart.width-chart.left-chart.right),y=chart.top+(1-t)*(chart.height-chart.top-chart.bottom);return <g key={t}><line className="grid-line" x1={x} x2={x} y1={chart.top} y2={chart.height-chart.bottom}/><line className="grid-line" x1={chart.left} x2={chart.width-chart.right} y1={y} y2={y}/><text className="axis-text" x={x} y={chart.height-33} textAnchor="middle">{compact(tickValue(t,domain.xMin,domain.xMax))}</text><text className="axis-text" x={chart.left-10} y={y+3} textAnchor="end">{compact(tickValue(t,domain.yMin,domain.yMax))}</text></g>})}
-          <text className="axis-label" x={(chart.left+chart.width-chart.right)/2} y={chart.height-7} textAnchor="middle">EXHAUST VELOCITY · KM/S</text><text className="axis-label" transform={`translate(15 ${(chart.top+chart.height-chart.bottom)/2}) rotate(-90)`} textAnchor="middle">THRUST · NEWTONS</text>
-          {filtered.map(d=>{const x=px(d.EV_kps),y=py(d.thrust_N),active=selected.includes(d.dataName),labelOnLeft=x>chart.width-chart.right-180;return <g className={`point${active?" selected":""}`} style={{color:COLORS[familyOf(d)],opacity:active?1:.58}} key={d.dataName} onClick={()=>toggle(d.dataName)} onMouseEnter={()=>setHovered({drive:d,x:x/chart.width*100,y:y/chart.height*100})} onFocus={()=>setHovered({drive:d,x:x/chart.width*100,y:y/chart.height*100})} tabIndex={0} role="button" aria-label={`Compare ${d.friendlyName}`}><PlotShape shape={shapeOf(d)} x={x} y={y} color={COLORS[familyOf(d)]} selected={active}/>{showNames&&<text className="point-label" x={x+(labelOnLeft?-8:8)} y={y+3.5} textAnchor={labelOnLeft?"end":"start"}>{d.friendlyName}</text>}</g>})}
-        </svg>{hovered&&<div className={`tooltip ${hovered.y>62?"above":"below"}`} style={{left:`${Math.min(hovered.x,72)}%`,...(hovered.y>62?{bottom:`${100-Math.max(10,Math.min(hovered.y,88))}%`}:{top:`${Math.max(10,Math.min(hovered.y,88))}%`})}}><strong>{hovered.drive.friendlyName}</strong><div className="tooltip-grid"><span>Thrust</span><span>{compact(hovered.drive.thrust_N," N")}</span><span>Exhaust</span><span>{precise(hovered.drive.EV_kps," km/s")}</span><span>Subtype</span><span>{subtypeOf(hovered.drive)}</span><span>Propellant</span><span>{readable(hovered.drive.propellant)}</span></div><div className="tooltip-materials"><span>Tank composition</span><b>{compositionOf(hovered.drive)}</b></div></div>}</div>}
+        {error?<div className="empty-state">{error}</div>:!drives.length?<div className="loading">Loading drive telemetry…</div>:!plotted.length?<div className="empty-state">No drives match the active filters or have a valid installed system.</div>:<div className="chart-wrap" onMouseLeave={()=>setHovered(null)}><svg className="chart" viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label={`${mode.label} scatter plot`}>
+          {chartMode==="power"&&<><rect className="zero-power-lane" x={chart.left} y={chart.top} width={Math.max(18,px(powerFloor*10)-chart.left)/2} height={chart.height-chart.top-chart.bottom}/><text className="zero-power-label" x={chart.left+8} y={chart.top+17}>SELF-POWERED · 0 GW</text></>}
+          {ticks.map(t=>{const x=chart.left+t*(chart.width-chart.left-chart.right),y=chart.top+(1-t)*(chart.height-chart.top-chart.bottom);const xValue=tickValue(t,domain.xMin,domain.xMax);return <g key={t}><line className="grid-line" x1={x} x2={x} y1={chart.top} y2={chart.height-chart.bottom}/><line className="grid-line" x1={chart.left} x2={chart.width-chart.right} y1={y} y2={y}/><text className="axis-text" x={x} y={chart.height-33} textAnchor="middle">{chartMode==="power"&&t===0?"0":compact(xValue)}</text><text className="axis-text" x={chart.left-10} y={y+3} textAnchor="end">{compact(tickValue(t,domain.yMin,domain.yMax))}</text></g>})}
+          <text className="axis-label" x={(chart.left+chart.width-chart.right)/2} y={chart.height-7} textAnchor="middle">{mode.xLabel}</text><text className="axis-label" transform={`translate(15 ${(chart.top+chart.height-chart.bottom)/2}) rotate(-90)`} textAnchor="middle">{mode.yLabel}</text>
+          {plotted.map(({drive:d,values})=>{const x=px(values.x),y=py(values.y),active=selected.includes(d.dataName),labelOnLeft=x>chart.width-chart.right-180;return <g className={`point${active?" selected":""}`} style={{color:COLORS[familyOf(d)],opacity:active?1:.58}} key={d.dataName} onClick={()=>toggle(d.dataName)} onMouseEnter={()=>setHovered({drive:d,x:x/chart.width*100,y:y/chart.height*100})} onFocus={()=>setHovered({drive:d,x:x/chart.width*100,y:y/chart.height*100})} tabIndex={0} role="button" aria-label={`Compare ${d.friendlyName}`}><PlotShape shape={shapeOf(d)} x={x} y={y} color={COLORS[familyOf(d)]} selected={active}/>{showNames&&<text className="point-label" x={x+(labelOnLeft?-8:8)} y={y+3.5} textAnchor={labelOnLeft?"end":"start"}>{d.friendlyName}</text>}</g>})}
+        </svg>{hovered&&(()=>{const system=systems.get(hovered.drive.dataName);return <div className={`tooltip ${hovered.y>62?"above":"below"}`} style={{left:`${Math.min(hovered.x,72)}%`,...(hovered.y>62?{bottom:`${100-Math.max(10,Math.min(hovered.y,88))}%`}:{top:`${Math.max(10,Math.min(hovered.y,88))}%`})}}><strong>{hovered.drive.friendlyName}</strong><div className="tooltip-grid"><span>Thrust</span><span>{compact(hovered.drive.thrust_N," N")}</span><span>Exhaust</span><span>{precise(hovered.drive.EV_kps," km/s")}</span>{chartMode!=="performance"&&<><span>Required power</span><span>{formatRequiredPower(hovered.drive)}</span></>}{chartMode==="installed"&&system&&<><span>Installed mass</span><span>{precise(system.totalMass," t")}</span><span>Specific thrust</span><span>{compact(hovered.drive.thrust_N/system.totalMass," N/t")}</span><span>Auto reactor</span><span>{system.plant?.friendlyName??"Self-powered"}</span><span>Auto radiator</span><span>{system.radiator?.friendlyName??(hovered.drive.cooling==="Open"?"Open-cycle":"Not required")}</span></>}<span>Subtype</span><span>{subtypeOf(hovered.drive)}</span><span>Propellant</span><span>{readable(hovered.drive.propellant)}</span></div><div className="tooltip-materials"><span>Tank composition</span><b>{compositionOf(hovered.drive)}</b></div></div>})()}</div>}
       </div>
       <aside className="panel compare-panel"><div className="panel-head"><h2 className="panel-title">Compare</h2><span className="count">{selected.length} / 4</span></div><p className="compare-help">Click a point or search by name and type. Shapes distinguish power-plant subtypes inside each color family.</p>
         {searchResults.length>0&&<div className="results">{searchResults.map(d=><div className="result-row" key={d.dataName}><div><div className="result-name">{d.friendlyName}</div><div className="result-meta">{familyOf(d)} · {subtypeOf(d)}</div></div><button className="add-btn" disabled={selected.length>=4&&!selected.includes(d.dataName)} onClick={()=>toggle(d.dataName)} aria-label={`${selected.includes(d.dataName)?"Remove":"Add"} ${d.friendlyName}`}>{selected.includes(d.dataName)?"−":"+"}</button></div>)}</div>}

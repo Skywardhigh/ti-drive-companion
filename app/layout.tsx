@@ -16,6 +16,17 @@ export const metadata: Metadata = {
   title: "TI Drive Companion",
   description:
     "Explore and compare Terra Invicta ship drives by thrust, exhaust velocity, family, and power plant.",
+  openGraph: {
+    title: "TI Drive Companion",
+    description: "Compare Terra Invicta drives by performance, power demand, and installed propulsion-system efficiency.",
+    images: [{ url: "/og.png", width: 1536, height: 1024, alt: "TI Drive Companion engine comparison chart" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "TI Drive Companion",
+    description: "Compare Terra Invicta drives by performance, power demand, and installed propulsion-system efficiency.",
+    images: ["/og.png"],
+  },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
