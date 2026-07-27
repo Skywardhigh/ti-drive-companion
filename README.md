@@ -20,7 +20,8 @@ catalog easier to search, filter, and compare.
 - Search by drive name, type, or propellant
 - Multi-select filters for propellants, drive families, and drive subtypes
 - Color-coded technology families and subtype-specific chart markers
-- Optional collision-aware drive-name labels with automatic nearby placement and`n  leader lines
+- Optional collision-aware drive-name labels with automatic nearby placement and
+  leader lines
 - Global larger, clearer text mode using a highly readable sans-serif font
 - Optional filtering to show only the highest-thruster-count variant of each
   drive
@@ -84,8 +85,8 @@ npm test
    categories. Drive subtypes are grouped beneath their main technology family.
 3. Keep **Max thrusters only** enabled to show only the largest configuration
    of each drive, or disable it to see every thruster-count variant.
-4. Enable **Show drive names** to label chart markers directly; it is disabled
-   by default to keep dense views readable.
+4. **Show drive names** is enabled by default and uses collision-aware placement.
+   Disable it when a cleaner marker-only view is preferred.
 5. Enable **Larger, clearer text** to increase typography across the entire
    interface and use a consistent accessibility-focused sans-serif font.
 6. Select **Drive performance**, **Power demand**, or **Installed system** above

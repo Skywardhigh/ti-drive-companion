@@ -100,7 +100,7 @@ export function DriveExplorer(){
   const [chartMode,setChartMode]=useState<ChartMode>("performance");
   const [radiatorChoice,setRadiatorChoice]=useState("LithiumSpray");
   const [maxOnly,setMaxOnly]=useState(true);
-  const [showNames,setShowNames]=useState(false);
+  const [showNames,setShowNames]=useState(true);
   const [readableText,setReadableText]=useState(false);
   const [excludedPropellants,setExcludedPropellants]=useState<Set<string>>(()=>new Set());
   const [excludedFamilies,setExcludedFamilies]=useState<Set<Family>>(()=>new Set());
