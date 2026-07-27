@@ -114,7 +114,7 @@ export function DriveExplorer(){
   const [hovered,setHovered]=useState<{drive:Drive;x:number;y:number}|null>(null);
   const tooltipTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const showTooltip=(drive:Drive,x:number,y:number)=>{if(tooltipTimer.current)clearTimeout(tooltipTimer.current);tooltipTimer.current=null;setHovered({drive,x,y})};
-  const closeTooltipSoon=()=>{if(tooltipTimer.current)clearTimeout(tooltipTimer.current);tooltipTimer.current=setTimeout(()=>{setHovered(null);tooltipTimer.current=null},2200)};
+  const closeTooltipSoon=()=>{if(tooltipTimer.current)clearTimeout(tooltipTimer.current);tooltipTimer.current=setTimeout(()=>{setHovered(null);tooltipTimer.current=null},1600)};
   useEffect(()=>()=>{if(tooltipTimer.current)clearTimeout(tooltipTimer.current)},[]);
   useEffect(()=>{Promise.all([fetch("/data/TIDriveTemplate.json"),fetch("/data/TIPowerPlantTemplate.json"),fetch("/data/TIRadiatorTemplate.json")]).then(async responses=>{if(responses.some(response=>!response.ok))throw new Error("Could not load the propulsion datasets.");return Promise.all(responses.map(response=>response.json()))}).then(([driveValues,plantValues,radiatorValues]:[Drive[],PowerPlant[],Radiator[]])=>{const active=driveValues.filter(d=>!d.disable);setDrives(active);setPlants(plantValues);setRadiators(radiatorValues);setSelected(["Apex Solid Rocket","Lars Drive","Triton Reflex Drive"].map(name=>active.filter(d=>baseDriveName(d)===name).sort((a,b)=>b.thrusters-a.thrusters)[0]?.dataName).filter((id):id is string=>Boolean(id)))}).catch(e=>setError(e instanceof Error?e.message:"Could not load data."))},[]);
   const propellantOptions=useMemo(()=>Array.from(new Set(drives.map(d=>d.propellant))).sort(),[drives]);
