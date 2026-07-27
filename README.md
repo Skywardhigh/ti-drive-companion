@@ -99,6 +99,8 @@ npm test
    power plant with the selected radiator. The radiator selector defaults to
    **Lithium Spray**. Its cycle filter can independently show open- and
    closed-cycle drives; radiator-calculated drives are grouped as closed cycle.
+   The in-view guidance explains which ship masses are excluded and how to
+   interpret specific thrust, cooling cycles, and the automatic reactor choice.
 7. Switch between logarithmic and linear chart scales as needed.
 8. Hover over a chart marker to inspect the drive and its fuel tank composition.
    Power and installed-system views add their relevant power, reactor,

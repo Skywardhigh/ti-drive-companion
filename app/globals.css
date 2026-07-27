@@ -33,6 +33,10 @@ h1 { margin:0; max-width:900px; font-size:clamp(44px,7.5vw,96px); font-weight:50
 .chart-mode-bar { display:flex; align-items:center; gap:16px; padding:14px 20px 4px; }
 .chart-mode-bar p { margin:0; color:var(--muted); font-size:11px; line-height:1.4; }
 .chart-mode-context { min-width:0; flex:1; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.installed-guidance { margin:10px 20px 4px; padding:12px 14px; display:grid; grid-template-columns:145px minmax(0,1fr); gap:14px; align-items:start; border:1px solid rgba(101,185,236,.24); border-radius:11px; background:rgba(101,185,236,.055); }
+.installed-guidance strong { color:#c9e8fa; font:750 10px/1.5 var(--font-geist-mono),monospace; letter-spacing:.1em; text-transform:uppercase; }
+.installed-guidance-copy { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr); gap:18px; }
+.installed-guidance p { margin:0; color:var(--muted); font-size:11px; line-height:1.55; }
 .radiator-control { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:10px; font-weight:750; letter-spacing:.08em; text-transform:uppercase; white-space:nowrap; }
 .radiator-control .select { width:180px; height:36px; font-size:12px; text-transform:none; letter-spacing:normal; }
 .chart-mode-toggle { display:inline-flex; flex:0 0 auto; padding:3px; border:1px solid var(--line); border-radius:11px; background:#0b1217; }
@@ -146,6 +150,8 @@ h1 { margin:0; max-width:900px; font-size:clamp(44px,7.5vw,96px); font-weight:50
 .readable-text .count { font-size:14px; }
 .readable-text .chart-mode-toggle button { font-size:14px; }
 .readable-text .chart-mode-bar p { font-size:13px; }
+.readable-text .installed-guidance strong { font-size:11px; }
+.readable-text .installed-guidance p { font-size:13px; }
 .readable-text .radiator-control { font-size:12px; }
 .readable-text .radiator-control .select { font-size:14px; }
 .readable-text .input,.readable-text .select,.readable-text .filter-dropdown summary,.readable-text .max-toggle,.readable-text .global-font-toggle,.readable-text .scale-toggle button { font-size:14px; }
@@ -167,6 +173,6 @@ h1 { margin:0; max-width:900px; font-size:clamp(44px,7.5vw,96px); font-weight:50
 .readable-text .metric-value { font-size:13px; }
 .readable-text .metric-section-label { font-size:11px; }
 .readable-text .add-btn { font-size:20px; }
-@media (max-width:1280px) { .controls,.controls.installed-controls{grid-template-columns:minmax(220px,1fr) 180px 230px}.compare-list{grid-template-columns:repeat(2,minmax(0,1fr))}.results{max-height:220px} }
-@media (max-width:760px) { .app-shell{padding-inline:12px}.topbar{margin-bottom:38px}.dataset-badge{display:none}.chart-mode-bar{align-items:stretch;flex-direction:column;gap:8px}.chart-mode-context{align-items:stretch;flex-direction:column}.radiator-control{justify-content:space-between}.radiator-control .select{width:min(220px,65vw)}.chart-mode-toggle{display:grid;grid-template-columns:1fr}.chart-mode-toggle button{min-height:40px}.controls,.controls.installed-controls{grid-template-columns:1fr}.scale-toggle{height:42px}.scale-toggle button{flex:1}.max-toggle{justify-content:center}.filter-menu,.type-dropdown .filter-menu{width:min(340px,calc(100vw - 48px))}.chart-wrap{padding-bottom:10px}.chart{min-width:760px}.compare-list{grid-template-columns:1fr} }
+@media (max-width:1280px) { .installed-guidance-copy{grid-template-columns:1fr;gap:8px}.controls,.controls.installed-controls{grid-template-columns:minmax(220px,1fr) 180px 230px}.compare-list{grid-template-columns:repeat(2,minmax(0,1fr))}.results{max-height:220px} }
+@media (max-width:760px) { .installed-guidance{grid-template-columns:1fr;margin-inline:12px}.app-shell{padding-inline:12px}.topbar{margin-bottom:38px}.dataset-badge{display:none}.chart-mode-bar{align-items:stretch;flex-direction:column;gap:8px}.chart-mode-context{align-items:stretch;flex-direction:column}.radiator-control{justify-content:space-between}.radiator-control .select{width:min(220px,65vw)}.chart-mode-toggle{display:grid;grid-template-columns:1fr}.chart-mode-toggle button{min-height:40px}.controls,.controls.installed-controls{grid-template-columns:1fr}.scale-toggle{height:42px}.scale-toggle button{flex:1}.max-toggle{justify-content:center}.filter-menu,.type-dropdown .filter-menu{width:min(340px,calc(100vw - 48px))}.chart-wrap{padding-bottom:10px}.chart{min-width:760px}.compare-list{grid-template-columns:1fr} }
 @media (prefers-reduced-motion:reduce) { *{transition:none!important} }
