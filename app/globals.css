@@ -350,6 +350,23 @@ h1 { margin:0; max-width:900px; font-size:clamp(44px,7.5vw,96px); font-weight:50
 .stat-label { font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: #8a95a0; }
 .stat-value { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 
+.armor-panel { margin-top: 0.5rem; }
+.armor-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+.armor-controls label { display: flex; flex-direction: column; gap: 0.25rem; }
+.armor-controls label > span {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a95a0;
+}
+.armor-controls .input { min-width: 8rem; }
+.armor-controls input[type="number"] { width: 7rem; }
+
 .fit-cell { white-space: nowrap; }
 .fit-button {
   width: 1.6rem;

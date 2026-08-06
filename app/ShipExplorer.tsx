@@ -14,7 +14,7 @@ type Hull = {
   dataName: string; friendlyName: string; consTier: number; mass_tons: number; crew: number;
   noseHardpoints: number; hullHardpoints: number; internalModules: number;
   structuralIntegrity: number; alien: boolean; requiredProjectName?: string;
-  length_m?: number; volume?: number; missionControl?: number; noShipyardBuild?: boolean;
+  length_m?: number; width_m?: number; volume?: number; missionControl?: number; noShipyardBuild?: boolean;
 };
 
 type Weapon = {
@@ -563,6 +563,63 @@ function slotKind(where: "nose" | "hull" | "base"): SlotKind | null {
   return where === "base" ? null : where;
 }
 
+type Facing = "nose" | "tail" | "side";
+type ArmorPoints = Record<Facing, number>;
+type CombatScale = "Cinematic" | "Realistic";
+
+/**
+ * Armor volume is scaled by the game's combat-scaling setting, and the two options are
+ * not a small difference: Realistic triples end armor while nearly halving side armor.
+ */
+const ARMOR_VOLUME_SCALE: Record<CombatScale, { ends: number; side: number }> = {
+  Cinematic: { ends: 1, side: 0.75 },
+  Realistic: { ends: 3, side: 0.5 },
+};
+
+/**
+ * Armor mass per facing, in tonnes. Armor is usually the heaviest thing on a ship, so a
+ * loadout total without it is missing its largest term.
+ *
+ * Armor wraps the hull as a cylinder, so the ends pay for area while the sides pay for
+ * circumference times length:
+ *   nose/tail volume = thickness × π × (radius + side thickness)²
+ *   side volume      = π × length × ((radius + side thickness)² − radius²)
+ *
+ * Two consequences fall straight out of the geometry. Side armor is far more expensive
+ * than end armor - 10-35× per point depending on hull - and it gets MORE expensive with
+ * every point added, because the (radius + thickness)² term grows as it thickens. Side
+ * armor also inflates the nose and tail cost, since thickening the flanks widens the caps
+ * those have to cover.
+ *
+ * Verified against the wiki's "Rough Armor Cost Multiplier" table, which is this formula
+ * linearised: it reproduces all four columns exactly for every hull checked.
+ */
+function armorMass_tons(
+  hull: Hull,
+  armor: Support | null,
+  facings: ArmorPoints,
+  scale: CombatScale,
+): Record<Facing, number> & { total: number } | null {
+  const thickness_cm = armor ? plateThickness_cm(armor) : null;
+  if (!armor || thickness_cm === null || typeof armor.density_kgm3 !== "number") return null;
+  if (typeof hull.width_m !== "number" || typeof hull.length_m !== "number") return null;
+
+  const perPoint_m = thickness_cm / 100;
+  const radius = hull.width_m / 2;
+  const side_m = perPoint_m * facings.side;
+  const outer = (radius + side_m) ** 2;
+  const multiplier = ARMOR_VOLUME_SCALE[scale];
+
+  const volume = {
+    nose: perPoint_m * facings.nose * Math.PI * outer * multiplier.ends,
+    tail: perPoint_m * facings.tail * Math.PI * outer * multiplier.ends,
+    side: Math.PI * hull.length_m * (outer - radius ** 2) * multiplier.side,
+  };
+  const toTonnes = (m3: number) => (m3 * (armor.density_kgm3 as number)) / 1000;
+  const mass = { nose: toTonnes(volume.nose), tail: toTonnes(volume.tail), side: toTonnes(volume.side) };
+  return { ...mass, total: mass.nose + mass.tail + mass.side };
+}
+
 export function ShipExplorer() {
   const [hulls, setHulls] = useState<Hull[]>([]);
   const [weapons, setWeapons] = useState<Array<Weapon & { family: string }>>([]);
@@ -577,6 +634,10 @@ export function ShipExplorer() {
   const [supportGroup, setSupportGroup] = useState<"Armor" | "Utility" | "Battery" | "Heat sink">("Armor");
   const [hullChoice, setHullChoice] = useState<string>("");
   const [loadout, setLoadout] = useState<Loadout>({});
+  const [section, setSection] = useState<"weapons" | "armor" | "modules">("weapons");
+  const [armorChoice, setArmorChoice] = useState<string>("");
+  const [armorPoints, setArmorPoints] = useState<ArmorPoints>({ nose: 0, tail: 0, side: 0 });
+  const [combatScale, setCombatScale] = useState<CombatScale>("Cinematic");
 
   useEffect(() => {
     const load = async (file: string) => {
@@ -646,6 +707,13 @@ export function ShipExplorer() {
   );
 
   const totals = useMemo(() => summarise(loadout, fittable, utilityModules), [loadout, fittable, utilityModules]);
+
+  const armors = useMemo(() => support.filter((s) => s.group === "Armor" && (showAlien || !isAlien(s))), [support, showAlien]);
+  const selectedArmor = useMemo(() => armors.find((a) => a.dataName === armorChoice) ?? null, [armors, armorChoice]);
+  const armorTotals = useMemo(
+    () => (selectedHull ? armorMass_tons(selectedHull, selectedArmor, armorPoints, combatScale) : null),
+    [selectedHull, selectedArmor, armorPoints, combatScale],
+  );
 
   const power = useMemo(() => {
     if (!selectedHull) return null;
@@ -1069,8 +1137,11 @@ export function ShipExplorer() {
                 })}
                 <div className="stat-card">
                   <span className="stat-label">Mass fitted</span>
-                  <span className="stat-value">{num(totals.mass_tons)} t</span>
-                  <span className="sub">hull {num(selectedHull.mass_tons)} t + fittings</span>
+                  <span className="stat-value">{num(totals.mass_tons + (armorTotals?.total ?? 0))} t</span>
+                  <span className="sub">
+                    hull {num(selectedHull.mass_tons)} t + {num(totals.mass_tons)} t fittings
+                    {armorTotals && armorTotals.total > 0 && ` + ${num(armorTotals.total)} t armor`}
+                  </span>
                 </div>
                 <div className="stat-card">
                   <span className="stat-label">Crew</span>
@@ -1097,6 +1168,114 @@ export function ShipExplorer() {
                 </div>
               </div>
 
+              {/* Sub-sections rather than one long list: a design is chosen in stages,
+                  and scrolling past 160 weapons to reach the modules is not one of them. */}
+              <div className="chart-mode-toggle group-toggle">
+                {([
+                  ["weapons", `Weapons (${num(totals.used.nose + totals.used.hull, 1)} slots)`],
+                  ["armor", `Armor (${armorTotals ? `${num(armorTotals.total)} t` : "none"})`],
+                  ["modules", `Modules (${num(totals.used.utility)}/${selectedHull.internalModules})`],
+                ] as const).map(([key, text]) => (
+                  <button key={key} className={section === key ? "active" : ""} onClick={() => setSection(key)}>{text}</button>
+                ))}
+              </div>
+
+              {section === "armor" && (
+                <div className="armor-panel">
+                  <div className="armor-controls">
+                    <label>
+                      <span>Armor type</span>
+                      <select className="input" value={armorChoice} onChange={(e) => setArmorChoice(e.target.value)}>
+                        <option value="">None</option>
+                        {armors.map((a) => <option key={a.dataName} value={a.dataName}>{label(a)}</option>)}
+                      </select>
+                    </label>
+                    {(["nose", "tail", "side"] as Facing[]).map((facing) => (
+                      <label key={facing}>
+                        <span>{facing} points</span>
+                        <input
+                          className="input"
+                          type="number"
+                          min={0}
+                          value={armorPoints[facing]}
+                          onChange={(e) =>
+                            setArmorPoints((p) => ({ ...p, [facing]: Math.max(0, Number(e.target.value) || 0) }))
+                          }
+                        />
+                      </label>
+                    ))}
+                    <label>
+                      <span>Combat scaling</span>
+                      <select className="input" value={combatScale} onChange={(e) => setCombatScale(e.target.value as CombatScale)}>
+                        <option>Cinematic</option>
+                        <option>Realistic</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  {!selectedArmor ? (
+                    <div className="empty-state">Pick an armor type to see what it weighs on this hull.</div>
+                  ) : (
+                    <>
+                      <table className="ship-table">
+                        <thead>
+                          <tr>
+                            <th>Facing</th><th>Points</th><th>Thickness</th><th>Mass</th><th>Share of armor</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(["nose", "tail", "side"] as Facing[]).map((facing) => {
+                            const mass = armorTotals?.[facing] ?? 0;
+                            const thickness = (plateThickness_cm(selectedArmor) ?? 0) * armorPoints[facing];
+                            const share = armorTotals && armorTotals.total > 0 ? mass / armorTotals.total : 0;
+                            return (
+                              <tr key={facing}>
+                                <td className="name-cell">{facing}</td>
+                                <td>{armorPoints[facing]}</td>
+                                <td>{num(thickness, 1)} cm</td>
+                                <td className={facing === "side" && share > 0.7 ? "stat-poor" : ""}>{num(mass)} t</td>
+                                <td>{num(share * 100)}%</td>
+                              </tr>
+                            );
+                          })}
+                          <tr className="is-fitted">
+                            <td className="name-cell"><strong>Total</strong></td>
+                            <td colSpan={2} />
+                            <td><strong>{num(armorTotals?.total ?? 0)} t</strong></td>
+                            <td>
+                              {/* Heavy armor runs to many times the bare hull, and "1,257%"
+                                  reads as noise where "12.6×" reads as a decision. */}
+                              {!selectedHull.mass_tons ? "—" : (() => {
+                                const ratio = (armorTotals?.total ?? 0) / selectedHull.mass_tons;
+                                return ratio >= 1
+                                  ? `${num(ratio, 1)}× bare hull`
+                                  : `${num(ratio * 100)}% of bare hull`;
+                              })()}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <p className="footer-note">
+                        <strong>Side armor is the expensive one</strong>, by an order of magnitude — it wraps the whole
+                        length of the ship where the nose and tail are just caps. It also gets progressively dearer:
+                        each point thickens the flanks, which widens the caps the nose and tail have to cover, so end
+                        armor quietly gets more expensive too. <strong>Combat scaling changes this a lot</strong> —
+                        Realistic triples end armor and nearly halves side armor, so a design tuned under one setting
+                        is not tuned under the other.
+                      </p>
+                      <p className="footer-note">
+                        Against particle beams this armor needs{" "}
+                        <strong>{num(pointsToBaseline(selectedArmor, "baryonic") ?? 0, 1)} points</strong> on a facing
+                        before it beats the innate radiation baseline and starts helping at all — compare that against
+                        the points you have actually bought above. There is no armor cap in the templates, so none is
+                        enforced here; in game the Armor Strut module doubles what each facing can carry.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {section !== "armor" && (
               <table className="ship-table">
                 <thead>
                   <tr>
@@ -1105,7 +1284,9 @@ export function ShipExplorer() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...fittable, ...utilityModules.map((m) => ({ ...m, family: "Utility" }))]
+                  {(section === "modules"
+                    ? utilityModules.map((m) => ({ ...m, family: "Utility" }))
+                    : fittable)
                     .filter((item) => label(item).toLowerCase().includes(search.toLowerCase()))
                     .filter((item) => {
                       // Anything already fitted stays listed even if it no longer fits, so
@@ -1164,6 +1345,7 @@ export function ShipExplorer() {
                     })}
                 </tbody>
               </table>
+              )}
 
               <p className="footer-note">
                 <strong>Power demand is the constraint the hardpoint count hides.</strong> Systems load is
@@ -1176,8 +1358,8 @@ export function ShipExplorer() {
                 <strong>Waste heat</strong> assumes sustained fire with radiators retracted, which is the combat case —
                 extended radiators are unarmored and bleed damage straight into the hull. That figure is what your heat
                 sinks have to absorb before the radiators are forced out. Compare it against the{" "}
-                <a href="/">Drive Companion</a> for reactors and radiators; mass here excludes armor, propellant and the
-                drive, so it is what the <em>fittings</em> cost, not the finished ship.
+                <a href="/">Drive Companion</a> for reactors and radiators; mass still excludes propellant and the
+                drive, so it is the hull plus what you have bolted to it, not the finished ship.
               </p>
             </>
           )}
