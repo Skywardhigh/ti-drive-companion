@@ -19,6 +19,57 @@ const datasets = [
     file: "TIRadiatorTemplate.json",
     requiredFields: ["dataName", "friendlyName", "specificPower_2s_KWkg"],
   },
+
+  // ── Ship Explorer datasets (added alongside the propulsion set) ───────────
+  // requiredFields are deliberately per-file: these templates are NOT uniform.
+  // Plasma, particle and heat-sink entries use `displayName` where everything
+  // else uses `friendlyName`, and laser entries omit `crew` and
+  // `baseWeaponMass_tons` on some rows - validating those would reject a
+  // perfectly good vanilla dataset.
+  {
+    file: "TIShipHullTemplate.json",
+    requiredFields: ["dataName", "friendlyName", "consTier", "mass_tons", "crew", "hullHardpoints", "internalModules", "alien"],
+  },
+  {
+    file: "TIShipArmorTemplate.json",
+    requiredFields: ["dataName", "friendlyName", "density_kgm3"],
+  },
+  {
+    file: "TIGunTemplate.json",
+    requiredFields: ["dataName", "friendlyName", "attackMode", "baseWeaponMass_tons", "crew"],
+  },
+  {
+    file: "TIMagneticGunTemplate.json",
+    requiredFields: ["dataName", "friendlyName", "attackMode", "baseWeaponMass_tons", "crew"],
+  },
+  {
+    file: "TILaserWeaponTemplate.json",
+    requiredFields: ["dataName", "friendlyName", "attackMode"],
+  },
+  {
+    file: "TIPlasmaWeaponTemplate.json",
+    requiredFields: ["dataName", "displayName", "attackMode", "baseWeaponMass_tons", "crew"],
+  },
+  {
+    file: "TIParticleWeaponTemplate.json",
+    requiredFields: ["dataName", "displayName", "attackMode", "baseWeaponMass_tons", "crew"],
+  },
+  {
+    file: "TIMissileTemplate.json",
+    requiredFields: ["dataName", "friendlyName", "attackMode", "baseWeaponMass_tons", "crew"],
+  },
+  {
+    file: "TIUtilityModuleTemplate.json",
+    requiredFields: ["dataName", "friendlyName", "minConsTier", "crew"],
+  },
+  {
+    file: "TIBatteryTemplate.json",
+    requiredFields: ["dataName", "friendlyName", "mass_tons", "crew", "energyCapacity_GJ"],
+  },
+  {
+    file: "TIHeatSinkTemplate.json",
+    requiredFields: ["dataName", "displayName", "mass_tons", "crew", "heatCapacity_GJ"],
+  },
 ];
 
 function validateDataset(file, value, requiredFields) {
