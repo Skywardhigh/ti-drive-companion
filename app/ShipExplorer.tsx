@@ -563,6 +563,13 @@ function slotKind(where: "nose" | "hull" | "base"): SlotKind | null {
   return where === "base" ? null : where;
 }
 
+/**
+ * The community's normalisation for comparing armors: one point of SIDE armor on a
+ * Gunship, the smallest hull, under cinematic scaling. The wiki's armor list is built on
+ * the same 0/0/1 basis, so figures here line up with it directly.
+ */
+const REFERENCE_HULL = "Gunship";
+
 type Facing = "nose" | "tail" | "side";
 type ArmorPoints = Record<Facing, number>;
 type CombatScale = "Cinematic" | "Realistic";
@@ -709,6 +716,7 @@ export function ShipExplorer() {
   const totals = useMemo(() => summarise(loadout, fittable, utilityModules), [loadout, fittable, utilityModules]);
 
   const armors = useMemo(() => support.filter((s) => s.group === "Armor" && (showAlien || !isAlien(s))), [support, showAlien]);
+  const referenceHull = useMemo(() => hulls.find((h) => h.dataName === REFERENCE_HULL) ?? null, [hulls]);
   const selectedArmor = useMemo(() => armors.find((a) => a.dataName === armorChoice) ?? null, [armors, armorChoice]);
   const armorTotals = useMemo(
     () => (selectedHull ? armorMass_tons(selectedHull, selectedArmor, armorPoints, combatScale) : null),
@@ -979,6 +987,7 @@ export function ShipExplorer() {
                 <thead>
                   <tr>
                     <th>Armor</th><th>Density</th><th>Thickness / point</th><th>Mass / point</th>
+                    <th>0/0/1 on a Gunship</th>
                     <th>Points to beat baseline<br /><span className="sub">x-ray · baryon</span></th>
                     <th>Bonuses</th><th>Materials</th>
                   </tr>
@@ -991,6 +1000,9 @@ export function ShipExplorer() {
                       const thickness = plateThickness_cm(s);
                       const xray = pointsToBaseline(s, "xRay");
                       const baryon = pointsToBaseline(s, "baryonic");
+                      const reference = referenceHull
+                        ? armorMass_tons(referenceHull, s, { nose: 0, tail: 0, side: 1 }, "Cinematic")?.total ?? null
+                        : null;
                       return (
                         <tr key={s.dataName}>
                           <td className="name-cell">{label(s)}{isAlien(s) && <span className="alien-tag">alien</span>}</td>
@@ -999,6 +1011,7 @@ export function ShipExplorer() {
                           <td className={perPoint !== null && perPoint <= 70 ? "stat-good" : perPoint !== null && perPoint >= 400 ? "stat-poor" : ""}>
                             {perPoint === null ? "—" : `${num(perPoint)} kg/m²`}
                           </td>
+                          <td>{reference === null ? "—" : `${num(reference)} t`}</td>
                           <td className={baryon !== null && baryon <= 20 ? "stat-good" : baryon !== null && baryon >= 75 ? "stat-poor" : ""}>
                             {xray === null ? "—" : num(xray, 1)} · {baryon === null ? "—" : num(baryon, 1)}
                           </td>
@@ -1020,8 +1033,16 @@ export function ShipExplorer() {
                 Sorted by <strong>mass per point</strong> — the price of armor, in kilograms per square metre of hull
                 covered. A point of armor is a plate thick enough to absorb 20 MJ, so tougher materials buy the same
                 protection for far less mass: Hybrid costs <strong>50 kg/m²</strong> against Steel&apos;s{" "}
-                <strong>588</strong>. Remember that a point of <em>side</em> armor is 10–35× heavier than nose or tail,
-                because of the surface area it has to wrap.
+                <strong>588</strong>. The <strong>0/0/1 on a Gunship</strong> column is the same thing made concrete on
+                the community&apos;s reference basis — one point of side armor on the smallest hull, cinematic scaling,
+                which is what the wiki&apos;s armor list tabulates. One point. On the smallest hull in the game. Steel
+                asks <strong>698 t</strong> for it where Hybrid asks <strong>59 t</strong>.
+              </p>
+              <p className="footer-note">
+                <strong>Researching better armor upgrades your habs too — but only up to Adamantane.</strong> Ground hab
+                modules take their armor from the best armor you have researched <em>excluding anything that costs
+                exotics</em>, which rules out both Exotic and Hybrid. So Adamantane is the last armor project that
+                improves your bases, and the two above it are ship-only.
               </p>
               <p className="footer-note">
                 <strong>Points to beat baseline</strong> is the particle-beam number, and it is a cliff rather than a
@@ -1220,7 +1241,8 @@ export function ShipExplorer() {
                       <table className="ship-table">
                         <thead>
                           <tr>
-                            <th>Facing</th><th>Points</th><th>Thickness</th><th>Mass</th><th>Share of armor</th>
+                            <th>Facing</th><th>Points</th><th>Thickness</th><th>Mass</th>
+                            <th>Next point costs</th><th>Share of armor</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1228,12 +1250,21 @@ export function ShipExplorer() {
                             const mass = armorTotals?.[facing] ?? 0;
                             const thickness = (plateThickness_cm(selectedArmor) ?? 0) * armorPoints[facing];
                             const share = armorTotals && armorTotals.total > 0 ? mass / armorTotals.total : 0;
+                            // Marginal cost, whole-ship: another point of SIDE armor also
+                            // widens the caps the nose and tail must cover, so it charges
+                            // more than its own facing's increase.
+                            const stepped = armorMass_tons(
+                              selectedHull, selectedArmor,
+                              { ...armorPoints, [facing]: armorPoints[facing] + 1 }, combatScale,
+                            );
+                            const marginal = stepped && armorTotals ? stepped.total - armorTotals.total : null;
                             return (
                               <tr key={facing}>
                                 <td className="name-cell">{facing}</td>
                                 <td>{armorPoints[facing]}</td>
                                 <td>{num(thickness, 1)} cm</td>
                                 <td className={facing === "side" && share > 0.7 ? "stat-poor" : ""}>{num(mass)} t</td>
+                                <td>{marginal === null ? "—" : `+${num(marginal)} t`}</td>
                                 <td>{num(share * 100)}%</td>
                               </tr>
                             );
@@ -1242,6 +1273,7 @@ export function ShipExplorer() {
                             <td className="name-cell"><strong>Total</strong></td>
                             <td colSpan={2} />
                             <td><strong>{num(armorTotals?.total ?? 0)} t</strong></td>
+                            <td />
                             <td>
                               {/* Heavy armor runs to many times the bare hull, and "1,257%"
                                   reads as noise where "12.6×" reads as a decision. */}
@@ -1256,12 +1288,21 @@ export function ShipExplorer() {
                         </tbody>
                       </table>
                       <p className="footer-note">
-                        <strong>Side armor is the expensive one</strong>, by an order of magnitude — it wraps the whole
-                        length of the ship where the nose and tail are just caps. It also gets progressively dearer:
-                        each point thickens the flanks, which widens the caps the nose and tail have to cover, so end
-                        armor quietly gets more expensive too. <strong>Combat scaling changes this a lot</strong> —
-                        Realistic triples end armor and nearly halves side armor, so a design tuned under one setting
-                        is not tuned under the other.
+                        <strong>Side armor costs 15–24× what end armor costs, per point</strong> — it wraps the whole
+                        length of the ship where the nose and tail are only caps, and the ratio widens on bigger hulls.
+                        That flat multiplier, not any growth curve, is why nose-and-tail-heavy designs win.
+                        The often-repeated claim that armor gets <em>exponentially</em> heavier is worth pinning down:
+                        it is <strong>quadratic, and mild at realistic thickness</strong>. Steel side armor on a Gunship
+                        runs 0.7% above a linear projection at 2 points, 6.7% at 10, and only reaches 29% at 40. Watch
+                        the <strong>next point costs</strong> column rather than assuming a cliff — adding side armor
+                        also charges the nose and tail, since thicker flanks widen the caps they cover.
+                      </p>
+                      <p className="footer-note">
+                        <strong>Combat scaling moves this more than the armor choice does</strong> — Realistic triples
+                        end armor and cuts side armor to two thirds, so a design tuned under one setting is not tuned
+                        under the other. The wiki&apos;s own armor list carries a standing{" "}
+                        <em>&ldquo;TODO: fix armor mass for realistic/cinematic differences&rdquo;</em>, so its mass
+                        figures do not split the two; these do.
                       </p>
                       <p className="footer-note">
                         Against particle beams this armor needs{" "}

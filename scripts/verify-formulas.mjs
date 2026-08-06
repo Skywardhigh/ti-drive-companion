@@ -78,6 +78,34 @@ for (const armor of armors) {
 }
 console.log("PASS  every XRay/Baryonic specialty equals points-per-half-value");
 
+// Armor volume wraps the hull as a cylinder. The wiki's "Rough Armor Cost Multiplier"
+// table is this formula linearised (dropping the t² term), so it must reproduce all four
+// of its columns: cinematic ends ×1 / side ×0.75, realistic ends ×3 / side ×0.5.
+const hulls = load("TIShipHullTemplate.json");
+const MULTIPLIERS = {
+  Frigate: [314, 4712, 942, 3142], Gunship: [79, 1178, 236, 785],
+  Dreadnought: [962, 22678, 2886, 15119], Battleship: [491, 11781, 1473, 7854],
+};
+for (const [name, expected] of Object.entries(MULTIPLIERS)) {
+  const hull = hulls.find((h) => h.dataName === name);
+  const endArea = Math.PI * (hull.width_m / 2) ** 2;
+  const sideArea = Math.PI * hull.length_m * hull.width_m; // d/dt of ((r+t)² - r²) at t=0
+  const got = [endArea, sideArea * 0.75, endArea * 3, sideArea * 0.5].map(Math.round);
+  const ok = got.every((v, i) => Math.abs(v - expected[i]) <= 2);
+  console.log(`${ok ? "PASS" : "FAIL"}  ${name} armor cost multipliers: [${got}] vs wiki [${expected}]`);
+  if (!ok) failures.push(`${name} armor multipliers`);
+}
+
+// Habs take the best armor that does NOT cost exotics, so the claim that Adamantane is
+// the last armor project improving them depends on exactly which armors carry an exotics
+// cost. Pin that set.
+const exoticCost = armors
+  .filter((a) => !/^alien/i.test(a.dataName) && (a.weightedBuildMaterials?.exotics ?? 0) > 0)
+  .map((a) => a.dataName);
+const exoticOk = exoticCost.length === 2 && ["ExoticArmor", "HybridArmor"].every((n) => exoticCost.includes(n));
+console.log(`${exoticOk ? "PASS" : "FAIL"}  only Exotic and Hybrid cost exotics (so habs cap at Adamantane): [${exoticCost}]`);
+if (!exoticOk) failures.push("exotic-cost armor set");
+
 // --- Lasers ----------------------------------------------------------------
 // A laser refuses to fire once its damage no longer beats the armor its spot covers.
 const lasers = load("TILaserWeaponTemplate.json");
