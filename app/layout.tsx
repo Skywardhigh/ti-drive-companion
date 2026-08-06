@@ -43,6 +43,19 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {/*
+          LOCAL ADDITION (not upstream): cross-links the two explorers.
+
+          The Ship Explorer at /ships is a local sibling of DriveExplorer covering hulls,
+          weapons, armor and support modules. It links back to "/" from its own header,
+          but the drive page had no way to reach it, so this nav lives in the shared
+          layout rather than inside DriveExplorer.tsx - keeping that component untouched
+          so upstream changes to it continue to merge cleanly.
+        */}
+        <nav className="site-nav">
+          <a href="/">Drives</a>
+          <a href="/ships">Ships</a>
+        </nav>
         {children}
       </body>
     </html>

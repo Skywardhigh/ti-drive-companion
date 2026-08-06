@@ -176,3 +176,156 @@ h1 { margin:0; max-width:900px; font-size:clamp(44px,7.5vw,96px); font-weight:50
 @media (max-width:1280px) { .installed-guidance-copy{grid-template-columns:1fr;gap:8px}.controls,.controls.installed-controls{grid-template-columns:minmax(220px,1fr) 180px 230px}.compare-list{grid-template-columns:repeat(2,minmax(0,1fr))}.results{max-height:220px} }
 @media (max-width:760px) { .installed-guidance{grid-template-columns:1fr;margin-inline:12px}.app-shell{padding-inline:12px}.topbar{margin-bottom:38px}.dataset-badge{display:none}.chart-mode-bar{align-items:stretch;flex-direction:column;gap:8px}.chart-mode-context{align-items:stretch;flex-direction:column}.radiator-control{justify-content:space-between}.radiator-control .select{width:min(220px,65vw)}.chart-mode-toggle{display:grid;grid-template-columns:1fr}.chart-mode-toggle button{min-height:40px}.controls,.controls.installed-controls{grid-template-columns:1fr}.scale-toggle{height:42px}.scale-toggle button{flex:1}.max-toggle{justify-content:center}.filter-menu,.type-dropdown .filter-menu{width:min(340px,calc(100vw - 48px))}.chart-wrap{padding-bottom:10px}.chart{min-width:760px}.compare-list{grid-template-columns:1fr} }
 @media (prefers-reduced-motion:reduce) { *{transition:none!important} }
+
+/* ── Ship Explorer (app/ShipExplorer.tsx) ──────────────────────────────────── */
+
+.table-wrap {
+  /* No max-width: .app-shell is already full-bleed with responsive padding, so a
+     centred column here just narrowed the tables and knocked them out of alignment
+     with the left-aligned hero. */
+  margin: 0 0 2rem;
+  width: 100%;
+  overflow-x: auto;
+}
+
+.ship-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.ship-table th {
+  text-align: left;
+  padding: 0.5rem 0.55rem;
+  border-bottom: 1px solid var(--line, #2a3140);
+  color: var(--muted, #8a9bb0);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.ship-table td {
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  white-space: nowrap;
+}
+
+.ship-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.name-cell {
+  font-weight: 600;
+  white-space: normal;
+  min-width: 11rem;
+}
+
+/* Dominated hulls stay readable but visibly de-emphasised - the point is that they
+   are still buildable, just not worth it. */
+.is-dominated td {
+  opacity: 0.55;
+}
+
+.verdict-bad { color: #ff8fa3; }
+.verdict-ok { color: #65c79f; }
+
+.alien-tag {
+  margin-left: 0.45rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.6rem;
+  background: rgba(163, 140, 255, 0.18);
+  color: #a38cff;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.family-dot {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+
+.spoiler-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--muted, #8a9bb0);
+  user-select: none;
+}
+
+.spoiler-note {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 2px solid #a38cff;
+  background: rgba(163, 140, 255, 0.08);
+  color: var(--muted, #8a9bb0);
+  font-size: 0.8rem;
+}
+
+.stat-good { color: #65c79f; font-weight: 600; }
+.stat-poor { color: #ff8fa3; }
+
+/* Cross-links the Drive and Ship explorers (see app/layout.tsx). */
+.site-nav {
+  display: flex;
+  gap: 0.25rem;
+  /* Match .app-shell's horizontal padding so the nav lines up with the brand. */
+  padding: 0.6rem clamp(18px, 4vw, 64px) 0;
+}
+
+.site-nav a {
+  padding: 0.3rem 0.8rem;
+  border-radius: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted, #8a9bb0);
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+
+.site-nav a:hover {
+  color: #e6edf5;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Damage classes - see the guide's direct/armor/internal distinction. */
+.dmg-kinetic { color: #65c79f; font-weight: 600; }
+.dmg-thermal { color: #65b9ec; font-weight: 600; }
+.dmg-radiation { color: #ff8fa3; font-weight: 600; }
+.dmg-blast { color: #f4b942; font-weight: 600; }
+
+/* Unit / qualifier text riding alongside a number, e.g. "48 vs ship". */
+.sub { color: var(--muted, #8a95a0); font-size: 0.82em; font-weight: 400; }
+
+.group-toggle { margin-bottom: 1rem; }
+
+/* The drive page's .controls is a fixed 6-column grid tuned to its own inputs;
+   reusing it stretched these differently-shaped controls. Flex wraps instead. */
+.ship-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 0 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.ship-controls .input {
+  width: auto;
+  min-width: 200px;
+  height: 38px;
+}
+
+.ship-controls select.input { min-width: 150px; }
