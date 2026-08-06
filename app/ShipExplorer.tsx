@@ -570,6 +570,29 @@ function slotKind(where: "nose" | "hull" | "base"): SlotKind | null {
  */
 const REFERENCE_HULL = "Gunship";
 
+/**
+ * What actually sits behind each armor facing.
+ *
+ * From the hit-weight table on the wiki's Spaceships page: a hit that gets through armor
+ * picks a random system from the struck area, weighted. These are game rules rather than
+ * template data, so they are transcribed rather than derived - but they are the whole
+ * reason the facings are not interchangeable, and no amount of mass-per-point tells you
+ * that the tail is where your drive lives.
+ *
+ * The asymmetry is stark. The nose holds almost nothing but the weapons mounted on it.
+ * The sides hold nearly everything. The tail is pure propulsion and power - which is why
+ * a ship taking tail fire has usually already lost the engagement that mattered.
+ */
+const AREA_SYSTEMS: Record<"nose" | "side" | "tail", string[]> = {
+  nose: ["Nose structure", "Nose weapons"],
+  side: [
+    "Central structure", "Power plant", "Drive", "Radiators", "Power coupling",
+    "Drive coupling", "Vector thrusters", "Propellant", "Sensors", "Battery",
+    "Hull weapons", "Utility modules",
+  ],
+  tail: ["Tail structure", "Power plant", "Drive", "Radiators", "Power coupling", "Drive coupling"],
+};
+
 type Facing = "nose" | "tail" | "side";
 type ArmorPoints = Record<Facing, number>;
 type CombatScale = "Cinematic" | "Realistic";
@@ -1241,7 +1264,7 @@ export function ShipExplorer() {
                       <table className="ship-table">
                         <thead>
                           <tr>
-                            <th>Facing</th><th>Points</th><th>Thickness</th><th>Mass</th>
+                            <th>Facing</th><th>Protects</th><th>Points</th><th>Thickness</th><th>Mass</th>
                             <th>Next point costs</th><th>Share of armor</th>
                           </tr>
                         </thead>
@@ -1261,6 +1284,12 @@ export function ShipExplorer() {
                             return (
                               <tr key={facing}>
                                 <td className="name-cell">{facing}</td>
+                                <td className="protects-cell">
+                                  {AREA_SYSTEMS[facing].join(" · ")}
+                                  {facing === "tail" && (
+                                    <><br /><span className="sub">no weapons, no crew spaces — drive and power only</span></>
+                                  )}
+                                </td>
                                 <td>{armorPoints[facing]}</td>
                                 <td>{num(thickness, 1)} cm</td>
                                 <td className={facing === "side" && share > 0.7 ? "stat-poor" : ""}>{num(mass)} t</td>
@@ -1271,7 +1300,7 @@ export function ShipExplorer() {
                           })}
                           <tr className="is-fitted">
                             <td className="name-cell"><strong>Total</strong></td>
-                            <td colSpan={2} />
+                            <td colSpan={3} />
                             <td><strong>{num(armorTotals?.total ?? 0)} t</strong></td>
                             <td />
                             <td>
@@ -1297,6 +1326,38 @@ export function ShipExplorer() {
                         the <strong>next point costs</strong> column rather than assuming a cliff — adding side armor
                         also charges the nose and tail, since thicker flanks widen the caps they cover.
                       </p>
+                      <p className="footer-note">
+                        <strong>The facings are not interchangeable, and the Protects column is why.</strong> The nose
+                        holds little but the weapons mounted on it, so nose armor mostly protects your own guns — which
+                        is the argument for as much of it as you can carry without cutting into the weapons themselves.
+                        The sides hold nearly everything, so even thin side armor earns its mass by stopping an unlucky
+                        hit from reaching the drive or reactor. The tail is pure propulsion and power, and taking fire
+                        there generally means the engagement is already lost — the usual reason it is left bare.
+                      </p>
+                      {/* Configuration-dependent, so it is computed rather than asserted:
+                          which saves more, stripping the tail entirely or shaving one
+                          point off the sides? */}
+                      {(() => {
+                        const tailSaving = armorTotals?.tail ?? 0;
+                        const lighterSides = armorPoints.side > 0
+                          ? armorMass_tons(selectedHull, selectedArmor,
+                              { ...armorPoints, side: armorPoints.side - 1 }, combatScale)
+                          : null;
+                        const sideSaving = lighterSides && armorTotals ? armorTotals.total - lighterSides.total : null;
+                        if (sideSaving === null || tailSaving === 0) return null;
+                        return (
+                          <p className="footer-note">
+                            <strong>Worth checking that last one against the mass, though.</strong> Nose and tail are
+                            both end caps and priced identically per point, so stripping the tail may save less than it
+                            feels like. On this hull and loadout, dropping <em>every</em> point of tail armor saves{" "}
+                            <strong>{num(tailSaving)} t</strong>, while shaving a single point off the sides saves{" "}
+                            <strong>{num(sideSaving)} t</strong>
+                            {sideSaving > tailSaving
+                              ? " — so if the tail is bare to save weight rather than as a deliberate bet on never being flanked, the sides are where the mass actually is."
+                              : " — so here the tail is genuinely the heavier saving, and leaving it bare pays for itself."}
+                          </p>
+                        );
+                      })()}
                       <p className="footer-note">
                         <strong>Combat scaling moves this more than the armor choice does</strong> — Realistic triples
                         end armor and cuts side armor to two thirds, so a design tuned under one setting is not tuned

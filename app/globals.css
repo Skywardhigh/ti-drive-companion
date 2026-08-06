@@ -351,6 +351,8 @@ h1 { margin:0; max-width:900px; font-size:clamp(44px,7.5vw,96px); font-weight:50
 .stat-value { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .armor-panel { margin-top: 0.5rem; }
+/* The systems list is long; let it wrap rather than stretch the table. */
+.protects-cell { max-width: 26rem; white-space: normal; line-height: 1.4; }
 .armor-controls {
   display: flex;
   flex-wrap: wrap;
