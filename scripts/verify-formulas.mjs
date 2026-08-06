@@ -113,5 +113,43 @@ for (const file of ["TIGunTemplate.json", "TIPlasmaWeaponTemplate.json"]) {
 }
 console.log(`PASS  ½mv²/20MJ matches every stored damage field (${checked} weapons)`);
 
+// --- Bombardment ------------------------------------------------------------
+// The Fleets page states capability as a rule: all magnetic weapons, all lasers with an
+// attack mode, and missiles with nuclear-family warheads. The UI trusts the templates'
+// `bombardmentValue` instead, so the two must keep agreeing - with exactly one known
+// divergence, the half-slot nuclear pods, which carry 0 where their bays do not.
+const BLAST = new Set(["Nuclear", "ShapedNuclear", "Antimatter"]);
+const FAMILIES = [
+  ["TIGunTemplate.json", "Gun"], ["TIMagneticGunTemplate.json", "Magnetic"],
+  ["TILaserWeaponTemplate.json", "Laser"], ["TIPlasmaWeaponTemplate.json", "Plasma"],
+  ["TIParticleWeaponTemplate.json", "Particle"], ["TIMissileTemplate.json", "Missile"],
+];
+const byRule = (family, e) =>
+  family === "Laser" ? Boolean(e.attackMode)
+  : family === "Magnetic" ? true
+  : family === "Missile" ? BLAST.has(e.warheadClass)
+  : false;
+
+const divergent = [];
+for (const [file, family] of FAMILIES) {
+  for (const entry of load(file)) {
+    if (((entry.bombardmentValue ?? 0) > 0) !== byRule(family, entry)) divergent.push(entry.dataName);
+  }
+}
+const expectedDivergent = ["PythonNuclearMissilePod", "CerebrusNuclearTorpedoPod", "HadesNuclearTorpedoPod"];
+const divergenceOk = divergent.length === expectedDivergent.length && divergent.every((d) => expectedDivergent.includes(d));
+console.log(`${divergenceOk ? "PASS" : "FAIL"}  bombardmentValue matches the wiki rule except the 3 nuclear pods: [${divergent}]`);
+if (!divergenceOk) failures.push("bombardment rule divergence");
+
+// Only 380-740 nm gets through Earth's atmosphere, which should leave green lasers alone.
+const throughAtmosphere = new Set(
+  load("TILaserWeaponTemplate.json")
+    .filter((l) => !/^alien/i.test(l.dataName) && l.wavelength_nm >= 380 && l.wavelength_nm <= 740)
+    .map((l) => l.wavelength_nm),
+);
+const greenOnly = throughAtmosphere.size === 1 && throughAtmosphere.has(540);
+console.log(`${greenOnly ? "PASS" : "FAIL"}  only 540 nm lasers bombard through atmosphere: [${[...throughAtmosphere]}]`);
+if (!greenOnly) failures.push("atmosphere-capable wavelengths");
+
 console.log(failures.length ? `\n${failures.length} FAILURE(S): ${failures.join(", ")}` : "\nall formula checks passed");
 process.exit(failures.length ? 1 : 0);

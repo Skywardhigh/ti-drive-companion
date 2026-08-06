@@ -308,6 +308,71 @@ h1 { margin:0; max-width:900px; font-size:clamp(44px,7.5vw,96px); font-weight:50
 /* Unit / qualifier text riding alongside a number, e.g. "48 vs ship". */
 .sub { color: var(--muted, #8a95a0); font-size: 0.82em; font-weight: 400; }
 
+/* ---- Loadout tab ---- */
+.loadout-hull-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.loadout-hull-picker label { font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: #8a95a0; }
+.loadout-hull-picker .input { min-width: 22rem; flex: 1 1 22rem; }
+
+.link-button {
+  background: none;
+  border: none;
+  color: #65b9ec;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* Auto-fit so the cards reflow instead of forcing the page to scroll sideways. */
+.loadout-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #262d35;
+  border-radius: 8px;
+  background: #12161b;
+}
+.stat-card.is-over { border-color: #ff8fa3; background: #1d1418; }
+.stat-card.is-over .stat-value { color: #ff8fa3; }
+.stat-label { font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: #8a95a0; }
+.stat-value { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.fit-cell { white-space: nowrap; }
+.fit-button {
+  width: 1.6rem;
+  height: 1.6rem;
+  margin-right: 0.25rem;
+  border: 1px solid #2d353e;
+  border-radius: 4px;
+  background: #1a1f26;
+  color: #e6e9ec;
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.fit-button:hover:not(:disabled) { border-color: #65b9ec; color: #65b9ec; }
+.fit-button:disabled { opacity: 0.3; cursor: not-allowed; }
+tr.is-fitted { background: #14201c; }
+
+@media (prefers-color-scheme: light) {
+  .stat-card { background: #f5f6f8; border-color: #d8dce1; }
+  .fit-button { background: #fff; border-color: #d8dce1; color: #1a1f26; }
+  tr.is-fitted { background: #eef6f1; }
+}
+
 .group-toggle { margin-bottom: 1rem; }
 
 /* The drive page's .controls is a fixed 6-column grid tuned to its own inputs;

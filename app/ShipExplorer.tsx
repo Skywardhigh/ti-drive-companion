@@ -26,6 +26,7 @@ type Weapon = {
   bombardmentValue?: number; warheadMass_kg?: number; shotPower_MJ?: number;
   flatDamage_MJ?: number; ammoMass_kg?: number; magazine?: number;
   muzzleVelocity_kps?: number; warheadClass?: string; deltaV_kps?: number;
+  efficiency?: number; chargingEnergy_GJ?: number;
   // Laser optics - everything the wiki's effective-range formula needs.
   wavelength_nm?: number; mirrorRadius_cm?: number; beam_quality?: number; jitter_Rad?: number;
 };
@@ -42,7 +43,7 @@ type Support = {
   powerRequirement_MW?: number;
 };
 
-type Tab = "hulls" | "weapons" | "support";
+type Tab = "hulls" | "weapons" | "support" | "loadout";
 
 /**
  * Spoiler gate.
@@ -63,9 +64,19 @@ function isAlien(entry: { alien?: boolean; requiredProjectName?: string; dataNam
   return entry.dataName.toLowerCase().startsWith("alien");
 }
 
-/** Templates disagree on the display-name field: plasma, particle and heat sinks use displayName. */
+/**
+ * Templates disagree on the display-name field: plasma, particle and heat sinks use
+ * displayName where everything else uses friendlyName.
+ *
+ * The split on the end handles one genuine data wart: VectorThrusters ships with
+ * `friendlyName` set to the unspaced dataName, so it renders run-together next to every
+ * other module. Only unspaced camelCase names are touched, which is exactly that one
+ * entry today - anything already containing a space (including "Mk1" forms) is left
+ * alone.
+ */
 function label(entry: { friendlyName?: string; displayName?: string; dataName: string }): string {
-  return entry.friendlyName ?? entry.displayName ?? entry.dataName;
+  const name = entry.friendlyName ?? entry.displayName ?? entry.dataName;
+  return /\s/.test(name) ? name : name.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
 const WEAPON_FILES: Array<{ file: string; family: string }> = [
@@ -374,6 +385,184 @@ function damageOf(weapon: Weapon & { family: string }): string {
   return value === null ? "—" : points(value);
 }
 
+/**
+ * Orbital bombardment, from the wiki's Fleets page. It is a capability rule rather than a
+ * stat: all magnetic weapons, all lasers with an attack mode, and missiles carrying
+ * nuclear-family warheads. Guns, plasma and particle beams can never bombard at all.
+ *
+ * `bombardmentValue` agrees with that rule for 306 of the 309 weapons in the templates.
+ * The three exceptions are systematic rather than noise - every nuclear missile POD (the
+ * half-slot version) carries 0 while every equivalent BAY carries a positive value, so
+ * the pods look deliberately excluded. The field is trusted over the prose because of
+ * that consistency, which means a bombardment ship wants Bays, not Pods.
+ *
+ * Thick atmospheres block more. Earth and Titan - the only two bombardable bodies with
+ * one - reject every missile outright, and every laser outside 380-740 nm. In practice
+ * that leaves only the 540 nm green lasers: UV at 270 and IR at 810/1080 are all blocked.
+ */
+const ATMOSPHERE_MIN_NM = 380;
+const ATMOSPHERE_MAX_NM = 740;
+
+function bombardment(weapon: Weapon & { family: string }): { capable: boolean; throughAtmosphere: boolean } {
+  const capable = (weapon.bombardmentValue ?? 0) > 0;
+  if (!capable) return { capable: false, throughAtmosphere: false };
+  if (weapon.family === "Missile") return { capable, throughAtmosphere: false };
+  if (weapon.family === "Laser") {
+    const nm = weapon.wavelength_nm;
+    return { capable, throughAtmosphere: typeof nm === "number" && nm >= ATMOSPHERE_MIN_NM && nm <= ATMOSPHERE_MAX_NM };
+  }
+  return { capable, throughAtmosphere: true };
+}
+
+/**
+ * Energy drawn from the ship's power plant per shot, in GJ. Naval guns and missiles are
+ * self-powered and draw nothing, which is why they keep firing after the reactor dies.
+ *
+ *   Laser / particle:  shotPower / efficiency
+ *   Magnetic:          ½ × AMMO mass × muzzle velocity² / efficiency  - note this is ammo
+ *                      mass, not warhead mass; the sabot has to be accelerated too, so
+ *                      power draw is always higher than damage suggests
+ *   Plasma:            charging energy plus the same kinetic term
+ */
+function powerPerShot_GJ(weapon: Weapon & { family: string }): number | null {
+  const efficiency = weapon.efficiency;
+  if (typeof efficiency !== "number" || efficiency <= 0) return null;
+  if (weapon.family === "Gun" || weapon.family === "Missile") return 0;
+  if (typeof weapon.shotPower_MJ === "number") return weapon.shotPower_MJ / efficiency / 1000;
+  const velocity_ms = typeof weapon.muzzleVelocity_kps === "number" ? weapon.muzzleVelocity_kps * 1000 : null;
+  if (velocity_ms === null) return null;
+  const mass_kg = weapon.family === "Plasma" ? weapon.warheadMass_kg : weapon.ammoMass_kg;
+  if (typeof mass_kg !== "number") return null;
+  const kinetic = (0.5 * mass_kg * velocity_ms ** 2) / efficiency / 1e9;
+  return kinetic + (weapon.family === "Plasma" ? (weapon.chargingEnergy_GJ ?? 0) / efficiency : 0);
+}
+
+/** Waste heat per shot: whatever the weapon's efficiency threw away. */
+function heatPerShot_GJ(weapon: Weapon & { family: string }): number | null {
+  const power = powerPerShot_GJ(weapon);
+  if (power === null || typeof weapon.efficiency !== "number") return null;
+  return power * (1 - weapon.efficiency);
+}
+
+/**
+ * Sustained power demand, GW.
+ *
+ * The wiki divides energy per shot by Min(cooldown, intra-salvo cooldown) - i.e. it sizes
+ * the reactor for the burst rate inside a salvo, not the average over the whole cycle.
+ * That is why a fast-salvo weapon demands far more plant than its damage implies.
+ */
+function powerDraw_GW(weapon: Weapon & { family: string }): number | null {
+  const perShot = powerPerShot_GJ(weapon);
+  if (perShot === null || typeof weapon.cooldown_s !== "number" || weapon.cooldown_s <= 0) return null;
+  const intra = weapon.intraSalvoCooldown_s;
+  const interval = typeof intra === "number" && intra > 0 ? Math.min(weapon.cooldown_s, intra) : weapon.cooldown_s;
+  return interval > 0 ? perShot / interval : null;
+}
+
+/* ------------------------------------------------------------------------- *
+ * Loadout
+ *
+ * The join the three tabs were missing. A hull is a budget - so many nose
+ * hardpoints, hull hardpoints and utility slots - and everything else is spend
+ * against it. Reading the tables separately hides the only question that
+ * matters: does this actually fit, and what does the reactor have to carry?
+ * ------------------------------------------------------------------------- */
+
+type SlotKind = "nose" | "hull" | "utility";
+
+/** Fitted items are keyed by family + dataName, since names repeat across families. */
+type Loadout = Record<string, number>;
+
+const keyOf = (item: { dataName: string }, family: string) => `${family}:${item.dataName}`;
+
+type Totals = {
+  used: Record<SlotKind, number>;
+  mass_tons: number;
+  crew: number;
+  weaponsPower_GW: number;
+  heat_GJs: number;
+  damagePerMinute: number;
+  unknownPower: number;
+};
+
+/**
+ * Required Systems Power, GW - the hotel load, before any weapon fires.
+ *   1.1 × (crew × 5 kW + consTier × 5 MW + Σ module power)
+ * Crew is the WHOLE ship's crew, so weapon and module crew count toward it.
+ */
+function systemsPower_GW(hull: Hull, crew: number, modulePower_MW: number): number {
+  return 1.1 * (crew * 0.000005 + hull.consTier * 0.005 + modulePower_MW * 0.001);
+}
+
+/**
+ * Roll a loadout up into the numbers a design is judged on.
+ *
+ * `unknownPower` counts fitted weapons whose draw could not be derived, so a total is
+ * never quietly reported as complete when part of it is missing.
+ */
+function summarise(
+  loadout: Loadout,
+  weapons: Array<Weapon & { family: string }>,
+  modules: Support[],
+): Totals {
+  const totals: Totals = {
+    used: { nose: 0, hull: 0, utility: 0 },
+    mass_tons: 0, crew: 0, weaponsPower_GW: 0, heat_GJs: 0, damagePerMinute: 0, unknownPower: 0,
+  };
+
+  for (const weapon of weapons) {
+    const count = loadout[keyOf(weapon, weapon.family)] ?? 0;
+    if (!count) continue;
+    const mount = parseMount(weapon.mount);
+    if (mount.where === "base") continue;
+    totals.used[mount.where] += mount.slots * count;
+    totals.mass_tons += (weapon.baseWeaponMass_tons ?? 0) * count;
+    totals.crew += (weapon.crew ?? 0) * count;
+
+    const draw = powerDraw_GW(weapon);
+    if (draw === null) totals.unknownPower += count;
+    else totals.weaponsPower_GW += draw * count;
+
+    const heat = heatPerShot_GJ(weapon);
+    const rpm = shotsPerMinute(weapon);
+    if (heat !== null && rpm !== null) totals.heat_GJs += (heat * rpm / 60) * count;
+
+    // Nuclear yields are not damage points, so they would swamp any sum they entered.
+    const perShot = weapon.family === "Missile" && BLAST_WARHEADS.has(weapon.warheadClass ?? "")
+      ? null
+      : damagePoints(weapon);
+    if (perShot !== null && rpm !== null) totals.damagePerMinute += perShot * rpm * count;
+  }
+
+  for (const module of modules) {
+    const count = loadout[keyOf(module, "Utility")] ?? 0;
+    if (!count) continue;
+    totals.used.utility += count;
+    totals.mass_tons += (module.mass_tons ?? 0) * count;
+    totals.crew += (module.crew ?? 0) * count;
+  }
+
+  return totals;
+}
+
+function modulePower_MW(loadout: Loadout, modules: Support[]): number {
+  return modules.reduce((sum, m) => sum + (m.powerRequirement_MW ?? 0) * (loadout[keyOf(m, "Utility")] ?? 0), 0);
+}
+
+/** Free slots of each kind, given a hull and what is already fitted. */
+function capacityOf(hull: Hull): Record<SlotKind, number> {
+  return { nose: hull.noseHardpoints, hull: hull.hullHardpoints, utility: hull.internalModules };
+}
+
+/**
+ * Narrow a parsed mount to a hull slot. Base and region emplacements return null - they
+ * are not ship equipment and have no budget to spend against, so callers must decide what
+ * to do rather than silently charging them to a hardpoint.
+ */
+function slotKind(where: "nose" | "hull" | "base"): SlotKind | null {
+  return where === "base" ? null : where;
+}
+
 export function ShipExplorer() {
   const [hulls, setHulls] = useState<Hull[]>([]);
   const [weapons, setWeapons] = useState<Array<Weapon & { family: string }>>([]);
@@ -386,6 +575,8 @@ export function ShipExplorer() {
   const [role, setRole] = useState<"All" | "Attack" | "Defense">("All");
   const [showBaseDefense, setShowBaseDefense] = useState(false);
   const [supportGroup, setSupportGroup] = useState<"Armor" | "Utility" | "Battery" | "Heat sink">("Armor");
+  const [hullChoice, setHullChoice] = useState<string>("");
+  const [loadout, setLoadout] = useState<Loadout>({});
 
   useEffect(() => {
     const load = async (file: string) => {
@@ -440,6 +631,43 @@ export function ShipExplorer() {
     [support, showAlien, search],
   );
 
+  const selectedHull = useMemo(
+    () => visibleHulls.find((h) => h.dataName === hullChoice) ?? null,
+    [visibleHulls, hullChoice],
+  );
+
+  // Utility modules are the only support group that occupies a hull slot; armor,
+  // batteries and heat sinks are fitted elsewhere and are not part of this budget.
+  const utilityModules = useMemo(() => support.filter((s) => s.group === "Utility" && (showAlien || !isAlien(s))), [support, showAlien]);
+
+  const fittable = useMemo(
+    () => weapons.filter((w) => (showAlien || !isAlien(w)) && parseMount(w.mount).where !== "base"),
+    [weapons, showAlien],
+  );
+
+  const totals = useMemo(() => summarise(loadout, fittable, utilityModules), [loadout, fittable, utilityModules]);
+
+  const power = useMemo(() => {
+    if (!selectedHull) return null;
+    const crew = selectedHull.crew + totals.crew;
+    return {
+      systems_GW: systemsPower_GW(selectedHull, crew, modulePower_MW(loadout, utilityModules)),
+      crew,
+    };
+  }, [selectedHull, totals, loadout, utilityModules]);
+
+  // Fittings deliberately survive a hull change. "Does this loadout fit a Frigate, or do I
+  // need a Cruiser?" is the question this tab exists to answer, and clearing on every
+  // change would throw the comparison away. An overflowing hull reports it instead: the
+  // slot card turns red and says how far over it is.
+
+  const adjust = (key: string, delta: number) =>
+    setLoadout((current) => {
+      const next = (current[key] ?? 0) + delta;
+      if (next <= 0) { const { [key]: _removed, ...rest } = current; return rest; }
+      return { ...current, [key]: next };
+    });
+
   const hiddenCount = useMemo(() => {
     if (showAlien) return 0;
     return [
@@ -468,9 +696,9 @@ export function ShipExplorer() {
 
       <section className="ship-controls">
         <div className="chart-mode-toggle">
-          {(["hulls", "weapons", "support"] as Tab[]).map((t) => (
+          {(["hulls", "weapons", "support", "loadout"] as Tab[]).map((t) => (
             <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
-              {t === "hulls" ? "Hulls" : t === "weapons" ? "Weapons" : "Armor & modules"}
+              {t === "hulls" ? "Hulls" : t === "weapons" ? "Weapons" : t === "support" ? "Armor & modules" : "Loadout"}
             </button>
           ))}
         </div>
@@ -568,7 +796,7 @@ export function ShipExplorer() {
               <tr>
                 <th>Weapon</th><th>Family</th><th>Damage</th><th>Mount</th><th>Role</th>
                 <th>Mass (t)</th><th>Crew</th><th>Shots/min</th><th>Listed range</th>
-                <th>Real range</th><th>Damage</th><th>PD-stoppable</th>
+                <th>Real range</th><th>Damage</th><th>Bombard</th><th>PD-stoppable</th>
               </tr>
             </thead>
             <tbody>
@@ -576,6 +804,7 @@ export function ShipExplorer() {
                 const mount = parseMount(w.mount);
                 const cls = damageClassOf(w);
                 const rpm = shotsPerMinute(w);
+                const bomb = bombardment(w);
                 // Only lasers have a damage-gated firing range; every other family fires
                 // out to its listed range, so there is nothing to correct for them.
                 const vsShip = w.family === "Laser" ? laserEffectiveRange(w, "ship") : null;
@@ -604,6 +833,11 @@ export function ShipExplorer() {
                       )}
                     </td>
                     <td>{damageOf(w)}</td>
+                    <td className={bomb.capable ? "stat-good" : ""}>
+                      {!bomb.capable ? "no" : bomb.throughAtmosphere ? "yes — inc. Earth" : (
+                        <>yes<span className="sub"> — airless only</span></>
+                      )}
+                    </td>
                     <td className={w.isPointDefenseTargetable ? "stat-poor" : "stat-good"}>
                       {w.isPointDefenseTargetable ? "yes — interceptable" : "no"}
                     </td>
@@ -623,6 +857,15 @@ export function ShipExplorer() {
             rather than impact energy and are the only weapons <em>exempt from overpenetration</em> — they keep destroying
             systems until spent, rather than punching out the far side with damage unused.
             <strong> Damage is in points</strong> (1 point = 20 MJ), the same unit as armor, so the two compare directly.
+          </p>
+          <p className="footer-note">
+            <strong>Bombard</strong> is narrower than it looks. Only magnetic weapons, lasers with an attack mode, and
+            nuclear-family missiles can bombard at all — guns, plasma and particle beams never can. Then a thick
+            atmosphere blocks more: <strong>Earth and Titan reject every missile</strong>, and every laser outside
+            380–740 nm, which in practice leaves only the <strong>540 nm green lasers</strong> — UV and IR are both shut
+            out. Two consequences worth designing around: a ship meant to hit Earth wants green lasers or magnetic
+            weapons, and <strong>nuclear missile <em>Pods</em> cannot bombard while the identical <em>Bays</em> can</strong>
+            {" "}— all three half-slot nuclear pods carry a bombardment value of zero where every full-slot bay does not.
           </p>
           <p className="footer-note">
             <strong>Missiles cannot be reduced to a single number</strong>, so they are not pretended into one.
@@ -778,6 +1021,165 @@ export function ShipExplorer() {
                   ))}
               </tbody>
             </table>
+          )}
+        </section>
+      )}
+
+      {tab === "loadout" && (
+        <section className="table-wrap">
+          <div className="loadout-hull-picker">
+            <label htmlFor="hull-select">Hull</label>
+            <select
+              id="hull-select"
+              className="input"
+              value={hullChoice}
+              onChange={(e) => setHullChoice(e.target.value)}
+            >
+              <option value="">Choose a hull…</option>
+              {visibleHulls.map((h) => (
+                <option key={h.dataName} value={h.dataName}>
+                  {label(h)} — T{h.consTier}, {h.noseHardpoints}N / {h.hullHardpoints}H / {h.internalModules}U
+                </option>
+              ))}
+            </select>
+            {selectedHull && Object.keys(loadout).length > 0 && (
+              <button className="link-button" onClick={() => setLoadout({})}>Clear fittings</button>
+            )}
+          </div>
+
+          {!selectedHull ? (
+            <div className="empty-state">
+              Pick a hull to start. Its hardpoints become the budget, and everything you fit is
+              measured against it.
+            </div>
+          ) : (
+            <>
+              <div className="loadout-summary">
+                {(["nose", "hull", "utility"] as SlotKind[]).map((kind) => {
+                  const capacity = capacityOf(selectedHull)[kind];
+                  const used = totals.used[kind];
+                  const over = used > capacity;
+                  return (
+                    <div key={kind} className={`stat-card ${over ? "is-over" : ""}`}>
+                      <span className="stat-label">{kind === "utility" ? "Utility slots" : `${kind} hardpoints`}</span>
+                      <span className="stat-value">{num(used, 1)} / {capacity}</span>
+                      <span className="sub">{over ? `over by ${num(used - capacity, 1)}` : `${num(capacity - used, 1)} free`}</span>
+                    </div>
+                  );
+                })}
+                <div className="stat-card">
+                  <span className="stat-label">Mass fitted</span>
+                  <span className="stat-value">{num(totals.mass_tons)} t</span>
+                  <span className="sub">hull {num(selectedHull.mass_tons)} t + fittings</span>
+                </div>
+                <div className="stat-card">
+                  <span className="stat-label">Crew</span>
+                  <span className="stat-value">{num(power?.crew ?? selectedHull.crew)}</span>
+                  <span className="sub">+{num(totals.crew)} from fittings · {num((power?.crew ?? 0) * 4)} t life support</span>
+                </div>
+                <div className="stat-card">
+                  <span className="stat-label">Power demand</span>
+                  <span className="stat-value">{num((power?.systems_GW ?? 0) + totals.weaponsPower_GW, 2)} GW</span>
+                  <span className="sub">
+                    {num(power?.systems_GW ?? 0, 2)} systems + {num(totals.weaponsPower_GW, 2)} weapons
+                    {totals.unknownPower > 0 && ` · ${totals.unknownPower} unknown`}
+                  </span>
+                </div>
+                <div className="stat-card">
+                  <span className="stat-label">Waste heat</span>
+                  <span className="stat-value">{num(totals.heat_GJs, 2)} GJ/s</span>
+                  <span className="sub">sustained fire, radiators retracted</span>
+                </div>
+                <div className="stat-card">
+                  <span className="stat-label">Damage output</span>
+                  <span className="stat-value">{num(totals.damagePerMinute)} pts/min</span>
+                  <span className="sub">excludes nuclear yields</span>
+                </div>
+              </div>
+
+              <table className="ship-table">
+                <thead>
+                  <tr>
+                    <th>Fit</th><th>Item</th><th>Family</th><th>Mount</th><th>Mass (t)</th>
+                    <th>Crew</th><th>Power</th><th>Damage / min</th><th>Fitted</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...fittable, ...utilityModules.map((m) => ({ ...m, family: "Utility" }))]
+                    .filter((item) => label(item).toLowerCase().includes(search.toLowerCase()))
+                    .filter((item) => {
+                      // Anything already fitted stays listed even if it no longer fits, so
+                      // switching to a smaller hull shows you WHAT is overflowing rather
+                      // than just that something is.
+                      if (loadout[keyOf(item, item.family)]) return true;
+                      // Otherwise hide what this hull could never take even when empty:
+                      // a 4-slot nose cannon on a Gunship is noise, not a choice.
+                      if (item.family === "Utility") return selectedHull.internalModules > 0;
+                      const mount = parseMount((item as Weapon).mount);
+                      const kind = slotKind(mount.where);
+                      return kind !== null && mount.slots <= capacityOf(selectedHull)[kind];
+                    })
+                    .map((item) => {
+                      const key = keyOf(item, item.family);
+                      const fitted = loadout[key] ?? 0;
+                      const isUtility = item.family === "Utility";
+                      const parsed = isUtility
+                        ? { slots: 1, where: "utility" as const, label: "1× utility" }
+                        : parseMount((item as Weapon).mount);
+                      const kind: SlotKind | null = parsed.where === "utility" ? "utility" : slotKind(parsed.where);
+                      const free = kind === null ? 0 : capacityOf(selectedHull)[kind] - totals.used[kind];
+                      const canAdd = kind !== null && parsed.slots <= free;
+                      const weapon = item as Weapon & { family: string };
+                      // Modules draw single-digit MW where weapons draw GW, so a shared
+                      // GW column renders every module as "0 GW". Each keeps its own unit.
+                      const moduleDraw_MW = isUtility ? (item as Support).powerRequirement_MW ?? 0 : 0;
+                      const draw = isUtility ? null : powerDraw_GW(weapon);
+                      const rpm = isUtility ? null : shotsPerMinute(weapon);
+                      const perShot = isUtility || BLAST_WARHEADS.has(weapon.warheadClass ?? "")
+                        ? null
+                        : damagePoints(weapon);
+                      return (
+                        <tr key={key} className={fitted ? "is-fitted" : ""}>
+                          <td className="fit-cell">
+                            <button className="fit-button" disabled={!canAdd} onClick={() => adjust(key, 1)}>+</button>
+                            <button className="fit-button" disabled={!fitted} onClick={() => adjust(key, -1)}>−</button>
+                          </td>
+                          <td className="name-cell">{label(item)}{isAlien(item) && <span className="alien-tag">alien</span>}</td>
+                          <td>
+                            <span className="family-dot" style={{ background: FAMILY_COLORS[item.family] ?? "#7d8894" }} />
+                            {item.family}
+                          </td>
+                          <td className={canAdd ? "" : "stat-poor"}>{parsed.label}</td>
+                          <td>{num(isUtility ? (item as Support).mass_tons : weapon.baseWeaponMass_tons, 1)}</td>
+                          <td>{num(item.crew)}</td>
+                          <td>
+                            {isUtility
+                              ? (moduleDraw_MW ? `${num(moduleDraw_MW)} MW` : "—")
+                              : draw === null ? "—" : draw === 0 ? "self-powered" : `${num(draw, 2)} GW`}
+                          </td>
+                          <td>{perShot !== null && rpm !== null ? num(perShot * rpm) : "—"}</td>
+                          <td className={fitted ? "stat-good" : ""}>{fitted || "—"}</td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+
+              <p className="footer-note">
+                <strong>Power demand is the constraint the hardpoint count hides.</strong> Systems load is
+                1.1 × (crew × 5 kW + tier × 5 MW + module draw); weapons are sized on their <em>burst</em> rate —
+                energy per shot ÷ the shorter of cooldown and intra-salvo gap — so a fast-salvo weapon demands far more
+                reactor than its damage suggests. Naval guns and missiles are <strong>self-powered</strong>: they draw
+                nothing and generate no heat, which is why they keep firing after the reactor is gone.
+              </p>
+              <p className="footer-note">
+                <strong>Waste heat</strong> assumes sustained fire with radiators retracted, which is the combat case —
+                extended radiators are unarmored and bleed damage straight into the hull. That figure is what your heat
+                sinks have to absorb before the radiators are forced out. Compare it against the{" "}
+                <a href="/">Drive Companion</a> for reactors and radiators; mass here excludes armor, propellant and the
+                drive, so it is what the <em>fittings</em> cost, not the finished ship.
+              </p>
+            </>
           )}
         </section>
       )}
