@@ -571,6 +571,33 @@ function slotKind(where: "nose" | "hull" | "base"): SlotKind | null {
 const REFERENCE_HULL = "Gunship";
 
 /**
+ * Armor points needed on a facing to stop a given tier of enemy laser, from the community
+ * armor guide (r/TerraInvicta, "[GUIDE][0.4.8] Updated Armor Tips"). The ladder is indexed
+ * entirely by alien weapon tiers and fleet composition, so it sits behind the spoiler
+ * gate with everything else alien.
+ *
+ * Written for 0.4.80 experimental. The author has confirmed it still holds "mostly" for
+ * 1.0, with the caveat that it predates particle beams mattering - which is a real gap,
+ * because armor's anti-radiation ranking is close to the inverse of its anti-laser one.
+ * See the reference table's radiation column.
+ */
+const ARMOR_BREAKPOINTS: Array<{ points: number; stops: string }> = [
+  { points: 1, stops: "Absolute minimum for any ship expecting combat — below this the weakest enemy simply kills you" },
+  { points: 4, stops: "Small orange · small violet at maximum range" },
+  { points: 8, stops: "Small violet" },
+  { points: 10, stops: "Medium orange at maximum range" },
+  { points: 15, stops: "Medium orange · medium violet at maximum range" },
+  { points: 20, stops: "Medium violet · large orange" },
+  { points: 30, stops: "Huge orange · large violet · small x-ray" },
+  { points: 50, stops: "Titan orange · huge violet · medium x-ray" },
+  { points: 80, stops: "Titan violet · large x-ray · gamma at maximum range" },
+  { points: 100, stops: "Huge x-ray" },
+  { points: 150, stops: "Titan x-ray · any chance at all against a real gamma shot" },
+  { points: 160, stops: "Bombarding alien bases" },
+  { points: 250, stops: "Gamma" },
+];
+
+/**
  * What actually sits behind each armor facing.
  *
  * From the hit-weight table on the wiki's Spaceships page: a hit that gets through armor
@@ -1012,6 +1039,7 @@ export function ShipExplorer() {
                     <th>Armor</th><th>Density</th><th>Thickness / point</th><th>Mass / point</th>
                     <th>0/0/1 on a Gunship</th>
                     <th>Points to beat baseline<br /><span className="sub">x-ray · baryon</span></th>
+                    <th>Mass to beat baryons</th>
                     <th>Bonuses</th><th>Materials</th>
                   </tr>
                 </thead>
@@ -1026,6 +1054,11 @@ export function ShipExplorer() {
                       const reference = referenceHull
                         ? armorMass_tons(referenceHull, s, { nose: 0, tail: 0, side: 1 }, "Cinematic")?.total ?? null
                         : null;
+                      // Points alone flatter dense armors, since a Boron Carbide point is
+                      // 8x the mass of an Adamantane one. Multiplying through is what
+                      // actually ranks them against particle beams - and it inverts the
+                      // anti-laser order almost exactly.
+                      const radiationMass = baryon !== null && perPoint !== null ? baryon * perPoint : null;
                       return (
                         <tr key={s.dataName}>
                           <td className="name-cell">{label(s)}{isAlien(s) && <span className="alien-tag">alien</span>}</td>
@@ -1037,6 +1070,9 @@ export function ShipExplorer() {
                           <td>{reference === null ? "—" : `${num(reference)} t`}</td>
                           <td className={baryon !== null && baryon <= 20 ? "stat-good" : baryon !== null && baryon >= 75 ? "stat-poor" : ""}>
                             {xray === null ? "—" : num(xray, 1)} · {baryon === null ? "—" : num(baryon, 1)}
+                          </td>
+                          <td className={radiationMass !== null && radiationMass <= 1500 ? "stat-good" : radiationMass !== null && radiationMass >= 7000 ? "stat-poor" : ""}>
+                            {radiationMass === null ? "—" : `${num(radiationMass)} kg/m²`}
                           </td>
                           <td>
                             {formatSpecialties(s.specialties).length === 0 ? "—" :
@@ -1060,6 +1096,29 @@ export function ShipExplorer() {
                 the community&apos;s reference basis — one point of side armor on the smallest hull, cinematic scaling,
                 which is what the wiki&apos;s armor list tabulates. One point. On the smallest hull in the game. Steel
                 asks <strong>698 t</strong> for it where Hybrid asks <strong>59 t</strong>.
+              </p>
+              <p className="footer-note">
+                <strong>The research path falls straight out of this sort:</strong> Silicon Carbide → Composite →
+                Foamed Metal → Nanotube → Adamantane, which is exactly the mass-per-point order among armors that cost
+                no exotics. Titanium, Boron Carbide and Steel are all heavier per point than Silicon Carbide, so
+                against lasers they are dead ends. Hybrid and Exotic sort top here on mass alone, but both carry an
+                exotics cost against an armor mass measured in thousands of tonnes — the community guidance is that
+                they are rarely worth it, and this table cannot see cost, only mass.
+              </p>
+              <p className="footer-note">
+                <strong>The −25% kinetics bonus is a weaker draw than it looks.</strong> Kinetic weapons chip armor
+                heavily and hit hard enough that point defense, not armor, is the answer to them — the received wisdom
+                is to shoot them down rather than plan to tank them. Armor is chiefly a laser problem, which is why the
+                path above tracks mass per point so closely.
+              </p>
+              <p className="footer-note">
+                <strong>Against particle beams that ranking very nearly inverts, and this is the newest gap in the
+                community guidance.</strong> Points alone flatter dense armors, so <em>mass to beat baryons</em>{" "}
+                multiplies through: Boron Carbide needs only 2.5 points and lands at{" "}
+                <strong>1,391 kg/m²</strong>, while Adamantane needs 124 points and costs{" "}
+                <strong>8,338 kg/m²</strong> — six times worse. Adamantane and Nanotube, the two endpoints of the laser
+                path, are the <em>worst two</em> non-exotic armors against radiation. Nothing here reduces radiation
+                damage to zero, so this is about attenuation rather than immunity.
               </p>
               <p className="footer-note">
                 <strong>Researching better armor upgrades your habs too — but only up to Adamantane.</strong> Ground hab
@@ -1358,6 +1417,56 @@ export function ShipExplorer() {
                           </p>
                         );
                       })()}
+                      <p className="footer-note">
+                        <strong>Spend the mass budget before the armor budget.</strong> The usual ceiling is about 20
+                        propellant tanks and roughly 1 mg of cruise acceleration; if armor pushes a design past either,
+                        the answer is a better drive rather than thinner plate. Armor that costs you the ability to
+                        choose the engagement has not made the ship tougher.
+                      </p>
+
+                      {/* The ladder is indexed entirely on alien weapon tiers and fleet
+                          composition, so it lives behind the same gate as everything else
+                          alien rather than being softened into uselessness. */}
+                      {showAlien ? (
+                        <>
+                          <table className="ship-table">
+                            <thead>
+                              <tr><th>Points</th><th>Stops</th><th>Your facings</th></tr>
+                            </thead>
+                            <tbody>
+                              {ARMOR_BREAKPOINTS.map((step) => {
+                                const meets = (["nose", "tail", "side"] as Facing[])
+                                  .filter((f) => armorPoints[f] >= step.points);
+                                return (
+                                  <tr key={step.points} className={meets.length ? "is-fitted" : ""}>
+                                    <td className="name-cell">{step.points}</td>
+                                    <td className="protects-cell">{step.stops}</td>
+                                    <td className={meets.length ? "stat-good" : ""}>
+                                      {meets.length ? meets.join(" · ") : "—"}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                          <p className="footer-note">
+                            Breakpoints from the community armor guide, written for 0.4.80 experimental and confirmed
+                            by its author as still holding <em>mostly</em> for 1.0 — with the explicit caveat that it
+                            predates particle beams being relevant. Treat the ladder as anti-laser guidance; for
+                            radiation see the mass-to-beat-baryons column under Armor &amp; modules, where the ranking
+                            is close to inverted. The shape of the advice is thickest armor forward, thin on the sides,
+                            because line ships come at you head-on while flankers carry smaller guns.
+                          </p>
+                        </>
+                      ) : (
+                        <p className="footer-note">
+                          A community breakpoint ladder exists for how many points stop which enemy weapons, but it is
+                          indexed entirely on late-game threats, so it is behind the spoiler toggle with everything else
+                          alien. The spoiler-free half of that advice: <strong>1 point is the floor</strong> for any
+                          ship expecting combat, and everything above it goes on the nose first.
+                        </p>
+                      )}
+
                       <p className="footer-note">
                         <strong>Combat scaling moves this more than the armor choice does</strong> — Realistic triples
                         end armor and cuts side armor to two thirds, so a design tuned under one setting is not tuned
