@@ -41,6 +41,9 @@ type Support = {
   xRayHalfValue_cm?: number; baryonicHalfValue_cm?: number; heatofVaporization_MJkg?: number;
   weightedBuildMaterials?: { volatiles?: number; metals?: number; nobleMetals?: number; exotics?: number };
   powerRequirement_MW?: number;
+  // Power plants and radiators, which the loadout checks demand against.
+  maxOutput_GW?: number; specificPower_tGW?: number; efficiency?: number; powerPlantClass?: string;
+  specificPower_2s_KWkg?: number; operatingTemp_K?: number; vulnerability?: number; radiatorType?: string;
 };
 
 type Tab = "hulls" | "weapons" | "support" | "loadout";
@@ -93,6 +96,10 @@ const SUPPORT_FILES: Array<{ file: string; group: string }> = [
   { file: "TIUtilityModuleTemplate.json", group: "Utility" },
   { file: "TIBatteryTemplate.json", group: "Battery" },
   { file: "TIHeatSinkTemplate.json", group: "Heat sink" },
+  // Loaded for the loadout's demand-vs-supply check only; the Drive Companion owns the
+  // job of actually comparing these against each other.
+  { file: "TIPowerPlantTemplate.json", group: "Power plant" },
+  { file: "TIRadiatorTemplate.json", group: "Radiator" },
 ];
 
 const FAMILY_COLORS: Record<string, string> = {
@@ -483,6 +490,8 @@ type Totals = {
   heat_GJs: number;
   damagePerMinute: number;
   unknownPower: number;
+  heatCapacity_GJ: number;
+  batteryCapacity_GJ: number;
 };
 
 /**
@@ -500,14 +509,28 @@ function systemsPower_GW(hull: Hull, crew: number, modulePower_MW: number): numb
  * `unknownPower` counts fitted weapons whose draw could not be derived, so a total is
  * never quietly reported as complete when part of it is missing.
  */
+/**
+ * Which fittings consume a utility slot.
+ *
+ * Heat sinks do - the wiki is explicit that radiators can only retract while there are
+ * "heat sinks in one or more utility slots". Batteries do not: the hit-weight table lists
+ * Battery as its own ship system, separate from Utility Modules, which reads as a
+ * dedicated fitting rather than a slot tenant.
+ */
+const SLOT_CONSUMING_GROUPS = new Set(["Utility", "Heat sink"]);
+
+/** Everything the Modules sub-tab offers, as opposed to weapons. */
+const MODULE_GROUPS = new Set(["Utility", "Heat sink", "Battery"]);
+
 function summarise(
   loadout: Loadout,
   weapons: Array<Weapon & { family: string }>,
-  modules: Support[],
+  modules: Array<Support & { group?: string }>,
 ): Totals {
   const totals: Totals = {
     used: { nose: 0, hull: 0, utility: 0 },
     mass_tons: 0, crew: 0, weaponsPower_GW: 0, heat_GJs: 0, damagePerMinute: 0, unknownPower: 0,
+    heatCapacity_GJ: 0, batteryCapacity_GJ: 0,
   };
 
   for (const weapon of weapons) {
@@ -535,18 +558,24 @@ function summarise(
   }
 
   for (const module of modules) {
-    const count = loadout[keyOf(module, "Utility")] ?? 0;
+    const group = module.group ?? "Utility";
+    const count = loadout[keyOf(module, group)] ?? 0;
     if (!count) continue;
-    totals.used.utility += count;
+    if (SLOT_CONSUMING_GROUPS.has(group)) totals.used.utility += count;
     totals.mass_tons += (module.mass_tons ?? 0) * count;
     totals.crew += (module.crew ?? 0) * count;
+    totals.heatCapacity_GJ += (module.heatCapacity_GJ ?? 0) * count;
+    totals.batteryCapacity_GJ += (module.energyCapacity_GJ ?? 0) * count;
   }
 
   return totals;
 }
 
-function modulePower_MW(loadout: Loadout, modules: Support[]): number {
-  return modules.reduce((sum, m) => sum + (m.powerRequirement_MW ?? 0) * (loadout[keyOf(m, "Utility")] ?? 0), 0);
+function modulePower_MW(loadout: Loadout, modules: Array<Support & { group?: string }>): number {
+  return modules.reduce(
+    (sum, m) => sum + (m.powerRequirement_MW ?? 0) * (loadout[keyOf(m, m.group ?? "Utility")] ?? 0),
+    0,
+  );
 }
 
 /** Free slots of each kind, given a hull and what is already fitted. */
@@ -620,6 +649,34 @@ const AREA_SYSTEMS: Record<"nose" | "side" | "tail", string[]> = {
   tail: ["Tail structure", "Power plant", "Drive", "Radiators", "Power coupling", "Drive coupling"],
 };
 
+/**
+ * Reactor mass for a given demand. `specificPower_tGW` is tonnes per gigawatt, and the
+ * plant is sized to the load it has to carry - so a heavier weapon fit does not just cost
+ * its own mass, it drags the reactor up with it. `maxOutput_GW` is a hard ceiling: below
+ * the demand, that plant cannot run the ship at all regardless of how many you would like
+ * to fit.
+ *
+ * Note this sizes the plant against SHIP systems and weapons only. A real design also has
+ * to feed the drive, and the wiki is explicit that the plant scales with the greater of
+ * the two - so treat this as a floor, and see the Drive Companion for the propulsion side.
+ */
+function reactorFor(plant: Support | null, demand_GW: number): { mass_tons: number; sufficient: boolean } | null {
+  if (!plant || typeof plant.specificPower_tGW !== "number" || typeof plant.maxOutput_GW !== "number") return null;
+  return {
+    mass_tons: plant.specificPower_tGW * demand_GW,
+    sufficient: plant.maxOutput_GW >= demand_GW,
+  };
+}
+
+/**
+ * Radiator mass needed to dissipate a heat rate continuously.
+ * `specificPower_2s_KWkg` is kilowatts shed per kilogram of radiator.
+ */
+function radiatorFor(radiator: Support | null, heat_GW: number): number | null {
+  if (!radiator || typeof radiator.specificPower_2s_KWkg !== "number" || radiator.specificPower_2s_KWkg <= 0) return null;
+  return (heat_GW * 1e6) / radiator.specificPower_2s_KWkg / 1000;
+}
+
 type Facing = "nose" | "tail" | "side";
 type ArmorPoints = Record<Facing, number>;
 type CombatScale = "Cinematic" | "Realistic";
@@ -691,7 +748,9 @@ export function ShipExplorer() {
   const [supportGroup, setSupportGroup] = useState<"Armor" | "Utility" | "Battery" | "Heat sink">("Armor");
   const [hullChoice, setHullChoice] = useState<string>("");
   const [loadout, setLoadout] = useState<Loadout>({});
-  const [section, setSection] = useState<"weapons" | "armor" | "modules">("weapons");
+  const [section, setSection] = useState<"weapons" | "armor" | "modules" | "power">("weapons");
+  const [plantChoice, setPlantChoice] = useState<string>("");
+  const [radiatorChoice, setRadiatorChoice] = useState<string>("");
   const [armorChoice, setArmorChoice] = useState<string>("");
   const [armorPoints, setArmorPoints] = useState<ArmorPoints>({ nose: 0, tail: 0, side: 0 });
   const [combatScale, setCombatScale] = useState<CombatScale>("Cinematic");
@@ -754,9 +813,13 @@ export function ShipExplorer() {
     [visibleHulls, hullChoice],
   );
 
-  // Utility modules are the only support group that occupies a hull slot; armor,
-  // batteries and heat sinks are fitted elsewhere and are not part of this budget.
-  const utilityModules = useMemo(() => support.filter((s) => s.group === "Utility" && (showAlien || !isAlien(s))), [support, showAlien]);
+  // Everything bolted into the hull that is not a weapon or armor. Heat sinks and
+  // batteries belong here rather than in the reference tables, because their whole point
+  // is to be sized against the heat and power this design actually generates.
+  const utilityModules = useMemo(
+    () => support.filter((s) => ["Utility", "Heat sink", "Battery"].includes(s.group) && (showAlien || !isAlien(s))),
+    [support, showAlien],
+  );
 
   const fittable = useMemo(
     () => weapons.filter((w) => (showAlien || !isAlien(w)) && parseMount(w.mount).where !== "base"),
@@ -766,6 +829,10 @@ export function ShipExplorer() {
   const totals = useMemo(() => summarise(loadout, fittable, utilityModules), [loadout, fittable, utilityModules]);
 
   const armors = useMemo(() => support.filter((s) => s.group === "Armor" && (showAlien || !isAlien(s))), [support, showAlien]);
+  const plants = useMemo(() => support.filter((s) => s.group === "Power plant" && (showAlien || !isAlien(s))), [support, showAlien]);
+  const radiators = useMemo(() => support.filter((s) => s.group === "Radiator" && (showAlien || !isAlien(s))), [support, showAlien]);
+  const selectedPlant = useMemo(() => plants.find((p) => p.dataName === plantChoice) ?? null, [plants, plantChoice]);
+  const selectedRadiator = useMemo(() => radiators.find((r) => r.dataName === radiatorChoice) ?? null, [radiators, radiatorChoice]);
   const referenceHull = useMemo(() => hulls.find((h) => h.dataName === REFERENCE_HULL) ?? null, [hulls]);
   const selectedArmor = useMemo(() => armors.find((a) => a.dataName === armorChoice) ?? null, [armors, armorChoice]);
   const armorTotals = useMemo(
@@ -776,11 +843,23 @@ export function ShipExplorer() {
   const power = useMemo(() => {
     if (!selectedHull) return null;
     const crew = selectedHull.crew + totals.crew;
+    const systems_GW = systemsPower_GW(selectedHull, crew, modulePower_MW(loadout, utilityModules));
+    const demand_GW = systems_GW + totals.weaponsPower_GW;
+    // Heat is not just the weapons. With the radiators in, systems load also dumps
+    // whatever the power plant's efficiency throws away - so the plant choice changes the
+    // heat problem, not only the mass. Propulsion adds more again while thrusting, which
+    // is out of scope here.
+    const systemsHeat_GJs = selectedPlant?.efficiency ? systems_GW * (1 - selectedPlant.efficiency) : 0;
+    const heat_GJs = totals.heat_GJs + systemsHeat_GJs;
     return {
-      systems_GW: systemsPower_GW(selectedHull, crew, modulePower_MW(loadout, utilityModules)),
-      crew,
+      crew, systems_GW, demand_GW, systemsHeat_GJs, heat_GJs,
+      reactor: reactorFor(selectedPlant, demand_GW),
+      radiator_tons: radiatorFor(selectedRadiator, heat_GJs),
+      // How long sustained fire lasts on heat sinks alone before the radiators are
+      // forced out and become shootable. This is the number the heat figure was missing.
+      endurance_s: heat_GJs > 0 ? totals.heatCapacity_GJ / heat_GJs : null,
     };
-  }, [selectedHull, totals, loadout, utilityModules]);
+  }, [selectedHull, totals, loadout, utilityModules, selectedPlant, selectedRadiator]);
 
   // Fittings deliberately survive a hull change. "Does this loadout fit a Frigate, or do I
   // need a Cruiser?" is the question this tab exists to answer, and clearing on every
@@ -1261,8 +1340,12 @@ export function ShipExplorer() {
                 </div>
                 <div className="stat-card">
                   <span className="stat-label">Waste heat</span>
-                  <span className="stat-value">{num(totals.heat_GJs, 2)} GJ/s</span>
-                  <span className="sub">sustained fire, radiators retracted</span>
+                  <span className="stat-value">{num(power?.heat_GJs ?? totals.heat_GJs, 2)} GJ/s</span>
+                  <span className="sub">
+                    {power?.endurance_s
+                      ? `${num(power.endurance_s)} s on heat sinks`
+                      : totals.heatCapacity_GJ > 0 ? "no heat generated" : "no heat sinks fitted"}
+                  </span>
                 </div>
                 <div className="stat-card">
                   <span className="stat-label">Damage output</span>
@@ -1278,6 +1361,7 @@ export function ShipExplorer() {
                   ["weapons", `Weapons (${num(totals.used.nose + totals.used.hull, 1)} slots)`],
                   ["armor", `Armor (${armorTotals ? `${num(armorTotals.total)} t` : "none"})`],
                   ["modules", `Modules (${num(totals.used.utility)}/${selectedHull.internalModules})`],
+                  ["power", `Power & heat (${num(power?.demand_GW ?? 0, 2)} GW)`],
                 ] as const).map(([key, text]) => (
                   <button key={key} className={section === key ? "active" : ""} onClick={() => setSection(key)}>{text}</button>
                 ))}
@@ -1486,7 +1570,92 @@ export function ShipExplorer() {
                 </div>
               )}
 
-              {section !== "armor" && (
+              {section === "power" && (
+                <div className="armor-panel">
+                  <div className="armor-controls">
+                    <label>
+                      <span>Power plant</span>
+                      <select className="input" value={plantChoice} onChange={(e) => setPlantChoice(e.target.value)}>
+                        <option value="">None</option>
+                        {[...plants]
+                          .sort((a, b) => (a.maxOutput_GW ?? 0) - (b.maxOutput_GW ?? 0))
+                          .map((p) => (
+                            <option key={p.dataName} value={p.dataName}>
+                              {label(p)} — {num(p.maxOutput_GW, 2)} GW max
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Radiator</span>
+                      <select className="input" value={radiatorChoice} onChange={(e) => setRadiatorChoice(e.target.value)}>
+                        <option value="">None</option>
+                        {radiators.map((r) => <option key={r.dataName} value={r.dataName}>{label(r)}</option>)}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="loadout-summary">
+                    <div className={`stat-card ${power?.reactor && !power.reactor.sufficient ? "is-over" : ""}`}>
+                      <span className="stat-label">Reactor</span>
+                      <span className="stat-value">
+                        {/* Advanced plants weigh a fraction of a tonne at low demand, so a
+                            whole-number format renders them as "0 t". */}
+                        {!selectedPlant ? "—"
+                          : !power?.reactor?.sufficient ? "too small"
+                          : `${num(power.reactor.mass_tons, power.reactor.mass_tons < 10 ? 2 : 0)} t`}
+                      </span>
+                      <span className="sub">
+                        {!selectedPlant
+                          ? "pick a plant to size it"
+                          : power?.reactor?.sufficient
+                            ? `${num(selectedPlant.maxOutput_GW, 2)} GW max vs ${num(power.demand_GW, 2)} GW demand`
+                            : `${num(selectedPlant.maxOutput_GW, 2)} GW max, needs ${num(power?.demand_GW ?? 0, 2)} GW`}
+                      </span>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-label">Radiators</span>
+                      <span className="stat-value">
+                        {power?.radiator_tons === null || power?.radiator_tons === undefined
+                          ? "—" : `${num(power.radiator_tons)} t`}
+                      </span>
+                      <span className="sub">to shed {num(power?.heat_GJs ?? 0, 2)} GJ/s continuously</span>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-label">Heat sinks</span>
+                      <span className="stat-value">{num(totals.heatCapacity_GJ)} GJ</span>
+                      <span className="sub">
+                        {power?.endurance_s
+                          ? `${num(power.endurance_s)} s of fire with radiators in`
+                          : "fit heat sinks below"}
+                      </span>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-label">Battery</span>
+                      <span className="stat-value">{num(totals.batteryCapacity_GJ)} GJ</span>
+                      <span className="sub">stored power for weapons</span>
+                    </div>
+                  </div>
+
+                  <p className="footer-note">
+                    <strong>The reactor is sized by the load, so weapons cost more than their own mass.</strong> Plant
+                    mass is tonnes-per-gigawatt × demand, and <em>max output is a hard wall</em> — under the demand, that
+                    plant cannot run the ship at all. This sizes against ship systems and weapons only; a real design
+                    also has to feed the drive, and the wiki is explicit the plant scales with the greater of the two,
+                    so treat this as a floor and see the <a href="/">Drive Companion</a> for propulsion.
+                  </p>
+                  <p className="footer-note">
+                    <strong>Heat sinks buy the seconds that matter.</strong> Radiators shed heat continuously but are
+                    unarmored and bleed damage into the hull, so combat is fought with them retracted — running on sink
+                    capacity alone until it fills and they are forced out. That endurance is capacity ÷ heat rate, and
+                    it is the number the waste-heat figure was missing on its own. Picking a plant also changes the heat
+                    problem, not just the mass: systems load dumps whatever the plant&apos;s efficiency throws away, so
+                    an inefficient reactor burns your sink budget before a shot is fired.
+                  </p>
+                </div>
+              )}
+
+              {section !== "armor" && section !== "power" && (
               <table className="ship-table">
                 <thead>
                   <tr>
@@ -1496,7 +1665,7 @@ export function ShipExplorer() {
                 </thead>
                 <tbody>
                   {(section === "modules"
-                    ? utilityModules.map((m) => ({ ...m, family: "Utility" }))
+                    ? utilityModules.map((m) => ({ ...m, family: m.group }))
                     : fittable)
                     .filter((item) => label(item).toLowerCase().includes(search.toLowerCase()))
                     .filter((item) => {
@@ -1506,7 +1675,7 @@ export function ShipExplorer() {
                       if (loadout[keyOf(item, item.family)]) return true;
                       // Otherwise hide what this hull could never take even when empty:
                       // a 4-slot nose cannon on a Gunship is noise, not a choice.
-                      if (item.family === "Utility") return selectedHull.internalModules > 0;
+                      if (MODULE_GROUPS.has(item.family)) return true;
                       const mount = parseMount((item as Weapon).mount);
                       const kind = slotKind(mount.where);
                       return kind !== null && mount.slots <= capacityOf(selectedHull)[kind];
@@ -1514,9 +1683,12 @@ export function ShipExplorer() {
                     .map((item) => {
                       const key = keyOf(item, item.family);
                       const fitted = loadout[key] ?? 0;
-                      const isUtility = item.family === "Utility";
+                      const isUtility = MODULE_GROUPS.has(item.family);
+                      // Batteries are a dedicated fitting rather than a slot tenant, so
+                      // they cost no utility slot and are always addable.
+                      const takesSlot = SLOT_CONSUMING_GROUPS.has(item.family);
                       const parsed = isUtility
-                        ? { slots: 1, where: "utility" as const, label: "1× utility" }
+                        ? { slots: takesSlot ? 1 : 0, where: "utility" as const, label: takesSlot ? "1× utility" : "dedicated" }
                         : parseMount((item as Weapon).mount);
                       const kind: SlotKind | null = parsed.where === "utility" ? "utility" : slotKind(parsed.where);
                       const free = kind === null ? 0 : capacityOf(selectedHull)[kind] - totals.used[kind];
